@@ -79,8 +79,8 @@ From the repository root:
 docker compose up -d
 ```
 
-- **Kafka** (KRaft): port 9092, healthcheck before other services start.
-- **kafka-init**: one-off job that creates topics `download-queue`, `download-progress`, `agent-heartbeat` with the desired partition counts.
+- **Redpanda** (Kafka API–compatible): internal port 9092 for other containers, external **19092** if you need to connect from the host (e.g. CLI tools).
+- **redpanda-init**: one-off job that creates topics `download-queue`, `download-progress`, `agent-heartbeat` with the desired partition counts.
 - **dispatcher**: API + React UI on port **8080** (open http://localhost:8080).
 - **agent**: 2 replicas by default; scale with `docker compose up -d --scale agent=4`.
 
