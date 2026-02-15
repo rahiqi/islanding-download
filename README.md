@@ -81,7 +81,8 @@ docker compose up -d
 
 - **Redpanda** (Kafka API–compatible): internal port 9092 for other containers, external **19092** if you need to connect from the host (e.g. CLI tools).
 - **redpanda-init**: one-off job that creates topics `download-queue`, `download-progress`, `agent-heartbeat` with the desired partition counts.
-- **dispatcher**: API + React UI on port **8080** (open http://localhost:8080).
+- **redpanda-console**: Web UI for Redpanda (topics, messages, consumer groups) at **http://localhost:8080**.
+- **dispatcher**: API + React UI (download portal) on port **8084** (open http://localhost:8084).
 - **agent**: 2 replicas by default; scale with `docker compose up -d --scale agent=4`.
 
 The dispatcher Dockerfile builds the React app in a stage, so no need to run `npm run build` first. To rebuild after code changes: `docker compose build --no-cache dispatcher` (or `agent`), then `docker compose up -d`.

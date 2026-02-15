@@ -2,26 +2,46 @@
 # Uses Redpanda (Kafka API–compatible) instead of Apache Kafka.
 # The dispatcher image builds the React UI during docker build.
 
+volumes:
+  redpanda-data:
+
 services:
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v24.3.5
-    command: redpanda start --smp 1 --memory 1G --reserve-memory 0M --node-id 0 --check=false --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092 --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.6
+    command:
+      - redpanda
+      - start
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:19092
+      - --rpc-addr
+      - redpanda:33145
+      - --advertise-rpc-addr
+      - redpanda:33145
+      - --mode
+      - dev-container
+      - --smp
+      - "1"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
     ports:
       - "19092:19092"
+      - "9644:9644"   # Redpanda Admin API (for Console)
     healthcheck:
-      test: ["CMD-SHELL", "rpk cluster health --brokers 127.0.0.1:9092 2>/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      test: ["CMD-SHELL", "rpk topic list --brokers 127.0.0.1:9092 || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
   redpanda-init:
-    image: docker.redpanda.com/redpandadata/redpanda:v24.3.5
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.6
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         echo "Waiting for Redpanda..."
-        until rpk cluster health --brokers redpanda:9092 2>/dev/null; do sleep 2; done
+        until rpk topic list --brokers redpanda:9092 2>/dev/null; do sleep 2; done
         rpk topic create download-queue --partitions 4 --brokers redpanda:9092 || true
         rpk topic create download-progress --partitions 4 --brokers redpanda:9092 || true
         rpk topic create agent-heartbeat --partitions 2 --brokers redpanda:9092 || true
@@ -30,6 +50,26 @@ services:
       redpanda:
         condition: service_healthy
     restart: "no"
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v3.5.1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml && /app/console'
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+    ports:
+      - "8082:8080"
+    depends_on:
+      redpanda:
+        condition: service_healthy
 
   dispatcher:
     build:
