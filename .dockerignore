@@ -1,0 +1,19 @@
+# Git and IDE
+.git
+.gitignore
+.vs
+.vscode
+*.user
+
+# Build outputs (we rebuild in container)
+**/bin
+**/obj
+**/out
+**/node_modules
+dispatcher/frontend/dist
+dispatcher/dispatcher/wwwroot
+
+# Docs and misc
+README.md
+*.md
+.DS_Store

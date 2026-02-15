@@ -1,0 +1,4 @@
+/* Base reset; main layout in App.css */
+#root {
+  min-height: 100vh;
+}

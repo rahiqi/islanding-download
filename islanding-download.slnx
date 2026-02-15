@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/agent/">
+    <Project Path="agent/downloader-agent/downloader-agent.csproj" Id="db863e0e-609e-47c3-acbb-e1b495b90d10" />
+  </Folder>
+  <Folder Name="/dispatcher/">
+    <Project Path="dispatcher/dispatcher/dispatcher.csproj" Id="dacc055c-a00e-4572-9881-bd7b620b1d0c" />
+  </Folder>
+</Solution>
