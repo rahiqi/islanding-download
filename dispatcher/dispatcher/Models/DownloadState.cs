@@ -9,6 +9,7 @@ public record DownloadState(
     long DownloadedBytes = 0,
     double BytesPerSecond = 0,
     string? AgentId = null,
+    string? PreferredAgentId = null,
     string? ErrorMessage = null,
     DateTime? CompletedAt = null
 )

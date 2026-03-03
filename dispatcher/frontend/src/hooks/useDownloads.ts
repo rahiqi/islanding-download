@@ -54,11 +54,11 @@ export function useDownloads() {
     return () => es.close()
   }, [refresh])
 
-  const addDownload = useCallback(async (url: string) => {
+  const addDownload = useCallback(async (url: string, preferredAgentId?: string | null) => {
     setLoading(true)
     setError(null)
     try {
-      await submitDownload(url)
+      await submitDownload(url, preferredAgentId)
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Submit failed')

@@ -2,11 +2,14 @@ import type { DownloadState, AgentInfo } from '../types/api'
 
 const base = ''
 
-export async function submitDownload(url: string): Promise<{ downloadId: string; url: string; status: string }> {
+export async function submitDownload(
+  url: string,
+  preferredAgentId?: string | null
+): Promise<{ downloadId: string; url: string; status: string }> {
   const res = await fetch(`${base}/api/downloads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, preferredAgentId: preferredAgentId || undefined }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

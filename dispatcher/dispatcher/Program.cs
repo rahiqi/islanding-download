@@ -42,9 +42,10 @@ downloadsApi.MapPost("/", async (DownloadSubmitRequest request, IDownloadStore s
         return Results.BadRequest(new { error = "Invalid or missing URL." });
 
     var downloadId = Guid.NewGuid().ToString("N");
-    var state = new DownloadState(downloadId, request.Url.Trim(), "Queued", DateTime.UtcNow);
+    var preferredAgentId = string.IsNullOrWhiteSpace(request.PreferredAgentId) ? null : request.PreferredAgentId.Trim();
+    var state = new DownloadState(downloadId, request.Url.Trim(), "Queued", DateTime.UtcNow, PreferredAgentId: preferredAgentId);
     store.Add(state);
-    await producer.EnqueueAsync(downloadId, state.Url, ct);
+    await producer.EnqueueAsync(downloadId, state.Url, preferredAgentId, ct);
     return Results.Created($"/api/downloads/{downloadId}", new { downloadId, url = state.Url, status = state.Status });
 })
 .WithName("SubmitDownload");
@@ -97,6 +98,15 @@ app.MapGet("/api/agents", (IAgentStore agentStore) =>
 })
 .WithName("ListAgents");
 
+app.MapPost("/api/agents/register", (AgentRegisterRequest request, IAgentStore agentStore) =>
+{
+    if (string.IsNullOrWhiteSpace(request.AgentId))
+        return Results.BadRequest(new { error = "AgentId is required." });
+    agentStore.RegisterAgent(request.AgentId.Trim(), request.Name?.Trim() ?? "", request.Location?.Trim() ?? "");
+    return Results.Ok(new { agentId = request.AgentId });
+})
+.WithName("RegisterAgent");
+
 // Serve SPA static files (React) when not in development proxy
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -104,5 +114,3 @@ app.UseStaticFiles();
 app.MapFallbackToFile("index.html");
 
 app.Run();
-
-public record DownloadSubmitRequest(string? Url);

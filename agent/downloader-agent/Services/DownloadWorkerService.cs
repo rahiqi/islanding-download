@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Confluent.Kafka;
 using downloader_agent.Models;
 using Microsoft.Extensions.Options;
@@ -13,6 +14,13 @@ public class DownloadWorkerOptions
     public string ProgressTopic { get; set; } = "download-progress";
     public string GroupId { get; set; } = "download-agents";
     public int ProgressIntervalMs { get; set; } = 200;
+}
+
+internal static class TopicNames
+{
+    private static readonly Regex Sanitize = new(@"[^a-zA-Z0-9._-]", RegexOptions.Compiled);
+    public static string AgentSpecificTopic(string baseTopic, string agentId) =>
+        baseTopic + "-" + Sanitize.Replace(agentId, "_");
 }
 
 public sealed class DownloadWorkerService : BackgroundService
@@ -29,11 +37,12 @@ public sealed class DownloadWorkerService : BackgroundService
 
     public DownloadWorkerService(
         IOptions<DownloadWorkerOptions> options,
+        IOptions<AgentOptions> agentOptions,
         IHttpClientFactory httpClientFactory,
         ILogger<DownloadWorkerService> logger)
     {
         _logger = logger;
-        _agentId = Environment.MachineName + "-" + Guid.NewGuid().ToString("N")[..8];
+        _agentId = agentOptions.Value.AgentId!;
         _progressTopic = options.Value.ProgressTopic;
         _progressIntervalMs = options.Value.ProgressIntervalMs;
 
@@ -45,7 +54,9 @@ public sealed class DownloadWorkerService : BackgroundService
             EnableAutoCommit = true
         };
         _consumer = new ConsumerBuilder<string, string>(consumerConfig).Build();
-        _consumer.Subscribe(options.Value.DownloadQueueTopic);
+        var baseTopic = options.Value.DownloadQueueTopic;
+        var topics = new List<string> { baseTopic, TopicNames.AgentSpecificTopic(baseTopic, _agentId) };
+        _consumer.Subscribe(topics);
 
         var producerConfig = new ProducerConfig { BootstrapServers = options.Value.BootstrapServers };
         _progressProducer = new ProducerBuilder<string, string>(producerConfig).Build();

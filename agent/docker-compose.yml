@@ -1,0 +1,28 @@
+# Downloader agent — run on any node that can reach the dispatcher and Kafka.
+# Build from repository root: docker compose -f agent/docker-compose.yml up -d
+#
+# Required env (or set in .env):
+#   DISPATCHER_URL   — dispatcher base URL (e.g. http://dispatcher-host:8084)
+#   KAFKA_BOOTSTRAP_SERVERS — Kafka/Redpanda brokers (e.g. kafka-host:9092)
+#
+# Optional:
+#   AGENT_NAME      — display name for this node
+#   AGENT_LOCATION  — location/datacenter
+#   AGENT_ID        — stable id (default: machine name + random suffix)
+
+services:
+  downloader-agent:
+    build:
+      context: ..
+      dockerfile: agent/downloader-agent/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      DISPATCHER_URL: ${DISPATCHER_URL:?DISPATCHER_URL is required}
+      AGENT_NAME: ${AGENT_NAME:-}
+      AGENT_LOCATION: ${AGENT_LOCATION:-}
+      AGENT_ID: ${AGENT_ID:-}
+      DownloadWorker__BootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS is required}
+      Heartbeat__BootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS}
+    # Optional: expose health for orchestration
+    # ports:
+    #   - "8080:8080"

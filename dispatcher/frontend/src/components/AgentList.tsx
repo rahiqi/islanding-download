@@ -17,13 +17,16 @@ function formatTime(iso: string) {
 export function AgentList({ agents, error }: AgentListProps) {
   return (
     <section className="agent-list">
-      <h2>Available agents ({agents.length})</h2>
+      <h2>Available nodes ({agents.length})</h2>
       {error && <p className="error">{error}</p>}
-      {agents.length === 0 && !error && <p className="muted">No agents connected yet.</p>}
+      {agents.length === 0 && !error && <p className="muted">No nodes registered yet.</p>}
       <ul>
         {agents.map((a) => (
           <li key={a.agentId}>
-            <span className="agent-id">{a.agentId}</span>
+            <span className="agent-name-location">
+              <span className="agent-id">{a.name || a.agentId}</span>
+              {a.location && <span className="agent-location"> · {a.location}</span>}
+            </span>
             <span className="agent-meta">
               last seen {formatTime(a.lastSeen)} · {a.currentDownloads} active
             </span>

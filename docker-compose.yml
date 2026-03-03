@@ -86,16 +86,5 @@ services:
       redpanda-init:
         condition: service_completed_successfully
 
-  agent:
-    build:
-      context: .
-      dockerfile: agent/downloader-agent/Dockerfile
-    environment:
-      ASPNETCORE_URLS: http://+:8080
-      DownloadWorker__BootstrapServers: redpanda:9092
-      Heartbeat__BootstrapServers: redpanda:9092
-    depends_on:
-      redpanda-init:
-        condition: service_completed_successfully
-    deploy:
-      replicas: 2
+  # Agents are deployed separately on each node using agent/docker-compose.yml
+  # with DISPATCHER_URL, AGENT_NAME, AGENT_LOCATION and KAFKA_BOOTSTRAP_SERVERS.

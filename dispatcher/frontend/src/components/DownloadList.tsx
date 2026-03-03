@@ -49,6 +49,7 @@ export function DownloadList({ downloads }: DownloadListProps) {
                 {d.status === 'Downloading' && d.bytesPerSecond > 0 && (
                   <span className="rate">{formatRate(d.bytesPerSecond)}</span>
                 )}
+                {d.preferredAgentId && !d.agentId && <span className="agent requested">Requested: {d.preferredAgentId}</span>}
                 {d.agentId && <span className="agent">Agent: {d.agentId}</span>}
               </div>
             </div>

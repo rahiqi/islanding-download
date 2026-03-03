@@ -7,6 +7,7 @@ export interface DownloadState {
   downloadedBytes: number
   bytesPerSecond: number
   agentId: string | null
+  preferredAgentId: string | null
   errorMessage: string | null
   completedAt: string | null
   percentComplete: number
@@ -14,6 +15,8 @@ export interface DownloadState {
 
 export interface AgentInfo {
   agentId: string
+  name: string
+  location: string
   lastSeen: string
   currentDownloads: number
 }

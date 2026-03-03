@@ -16,7 +16,7 @@ function App() {
         <p>Drop a URL — any connected agent will pick it up and download.</p>
       </header>
       <main>
-        <DownloadBox onSubmit={addDownload} loading={loading} error={downloadError} />
+        <DownloadBox agents={agents} onSubmit={addDownload} loading={loading} error={downloadError} />
         <AgentList agents={agents} error={agentsError} />
         <DownloadList downloads={downloads} />
       </main>
