@@ -11,7 +11,9 @@
     "https": {
       "commandName": "Project",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "KAFKA_BOOTSTRAP_SERVERS": "185.112.38.154:19092",
+        "DISPATCHER_URL": "http://185.112.38.154:8084"
       },
       "dotnetRunMessages": true,
       "applicationUrl": "https://localhost:7266;http://localhost:5172"

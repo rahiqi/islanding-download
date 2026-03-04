@@ -16,6 +16,7 @@ builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection(KafkaO
 builder.Services.Configure<KafkaConsumerOptions>(builder.Configuration.GetSection("KafkaConsumer"));
 builder.Services.Configure<AgentHeartbeatConsumerOptions>(builder.Configuration.GetSection("AgentHeartbeat"));
 builder.Services.AddSingleton<IKafkaDownloadProducer, KafkaDownloadProducer>();
+builder.Services.AddSingleton<IKafkaTopicEnsurer, KafkaTopicEnsurer>();
 builder.Services.AddHostedService<ProgressConsumerHostedService>();
 builder.Services.AddHostedService<AgentHeartbeatHostedService>();
 
@@ -99,10 +100,11 @@ app.MapGet("/api/agents", (IAgentStore agentStore) =>
 })
 .WithName("ListAgents");
 
-app.MapPost("/api/agents/register", (AgentRegisterRequest? request, IAgentStore agentStore) =>
+app.MapPost("/api/agents/register", async (AgentRegisterRequest? request, IAgentStore agentStore, IKafkaTopicEnsurer topicEnsurer, CancellationToken ct) =>
 {
     if (request is null || string.IsNullOrWhiteSpace(request.AgentId))
         return Results.BadRequest(new { error = "Request body must contain a non-empty 'agentId'." });
+    await topicEnsurer.EnsureAgentTopicsAsync(ct);
     agentStore.RegisterAgent(request.AgentId.Trim(), request.Name?.Trim() ?? "", request.Location?.Trim() ?? "");
     return Results.Ok(new { agentId = request.AgentId });
 })
