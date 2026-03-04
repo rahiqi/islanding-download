@@ -1,0 +1,7 @@
+# Override for Raspberry Pi 32-bit (armhf). Use with:
+#   docker compose -f docker-compose.yml -f docker-compose.arm32.yml up -d
+# This forces the dispatcher (and agent if you add it to the root compose) to build/run as linux/arm/v7.
+
+services:
+  dispatcher:
+    platform: linux/arm/v7

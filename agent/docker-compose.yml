@@ -9,6 +9,9 @@
 #   AGENT_NAME      — display name for this node
 #   AGENT_LOCATION  — location/datacenter
 #   AGENT_ID        — stable id (default: machine name + random suffix)
+#
+# Raspberry Pi 32-bit: use override so image is arm/v7:
+#   docker compose -f agent/docker-compose.yml -f agent/docker-compose.arm32.yml up -d
 
 services:
   downloader-agent:
