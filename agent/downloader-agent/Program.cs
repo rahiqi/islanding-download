@@ -6,6 +6,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<DownloadWorkerOptions>(builder.Configuration.GetSection("DownloadWorker"));
 builder.Services.Configure<HeartbeatOptions>(builder.Configuration.GetSection("Heartbeat"));
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection(AgentOptions.SectionName));
+// Env overrides so Docker/env vars always win (e.g. KAFKA_BOOTSTRAP_SERVERS, DISPATCHER_URL)
+builder.Services.PostConfigure<DownloadWorkerOptions>(options =>
+{
+    var bootstrap = Environment.GetEnvironmentVariable("KAFKA_BOOTSTRAP_SERVERS");
+    if (!string.IsNullOrWhiteSpace(bootstrap))
+        options.BootstrapServers = bootstrap.Trim();
+});
+builder.Services.PostConfigure<HeartbeatOptions>(options =>
+{
+    var bootstrap = Environment.GetEnvironmentVariable("KAFKA_BOOTSTRAP_SERVERS");
+    if (!string.IsNullOrWhiteSpace(bootstrap))
+        options.BootstrapServers = bootstrap.Trim();
+});
 builder.Services.PostConfigure<AgentOptions>(options =>
 {
     if (string.IsNullOrWhiteSpace(options.DispatcherUrl))

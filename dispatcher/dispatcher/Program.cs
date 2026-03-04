@@ -22,6 +22,7 @@ builder.Services.AddHostedService<AgentHeartbeatHostedService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.PropertyNameCaseInsensitive = true;
 });
 builder.Services.AddOpenApi();
 builder.Services.AddCors();
@@ -98,10 +99,10 @@ app.MapGet("/api/agents", (IAgentStore agentStore) =>
 })
 .WithName("ListAgents");
 
-app.MapPost("/api/agents/register", (AgentRegisterRequest request, IAgentStore agentStore) =>
+app.MapPost("/api/agents/register", (AgentRegisterRequest? request, IAgentStore agentStore) =>
 {
-    if (string.IsNullOrWhiteSpace(request.AgentId))
-        return Results.BadRequest(new { error = "AgentId is required." });
+    if (request is null || string.IsNullOrWhiteSpace(request.AgentId))
+        return Results.BadRequest(new { error = "Request body must contain a non-empty 'agentId'." });
     agentStore.RegisterAgent(request.AgentId.Trim(), request.Name?.Trim() ?? "", request.Location?.Trim() ?? "");
     return Results.Ok(new { agentId = request.AgentId });
 })
