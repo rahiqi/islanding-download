@@ -1,35 +1,12 @@
 # Build and run Dispatcher (non-AOT for Kafka compatibility).
 # Build context: repository root (see DockerfileContext in .csproj).
 # Includes React UI built into wwwroot.
-# For Raspberry Pi 32-bit, build with: docker buildx build --platform linux/arm/v7 -f dispatcher/dispatcher/Dockerfile .
+# Dispatcher runs on 64-bit hosts only (amd64/arm64); agents can run on Pi 32-bit via agent/docker-compose.arm32.yml.
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
-
-# Provides librdkafka: apt on amd64/arm64, build from source on arm (32-bit Pi).
-FROM debian:bookworm-slim AS librdkafka-native
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl xz-utils \
-    && rm -rf /var/lib/apt/lists/*
-RUN mkdir -p /out \
-    && ARCH=$(dpkg --print-architecture) \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then \
-        apt-get update && apt-get install -y --no-install-recommends librdkafka1 \
-        && cp -P /usr/lib/$(dpkg --print-architecture)-linux-gnu/librdkafka.so* /out/ \
-        && rm -rf /var/lib/apt/lists/*; \
-    else \
-        apt-get update && apt-get install -y --no-install-recommends build-essential git cmake libssl-dev zlib1g-dev \
-        && rm -rf /var/lib/apt/lists/* \
-        && git clone --depth 1 -b v2.4.0 https://github.com/confluentinc/librdkafka.git /tmp/librdkafka \
-        && cd /tmp/librdkafka \
-        && ./configure --prefix=/out \
-        && make -j$(nproc) \
-        && make install \
-        && cp -P /out/lib/librdkafka.so* /out/ \
-        && rm -rf /tmp/librdkafka; \
-    fi
 
 # Frontend (React) build
 FROM node:22-alpine AS frontend
@@ -55,11 +32,9 @@ RUN dotnet publish "dispatcher.csproj" -c $BUILD_CONFIGURATION -o /app/publish /
 
 FROM base AS final
 USER root
-COPY --from=librdkafka-native /out/librdkafka.so* /usr/local/lib/
+RUN apt-get update && apt-get install -y --no-install-recommends librdkafka1 && rm -rf /var/lib/apt/lists/*
 RUN ldconfig
+USER $APP_UID
 WORKDIR /app
 COPY --from=publish /app/publish .
-COPY --from=librdkafka-native /out/librdkafka.so* /app/
-ENV LD_LIBRARY_PATH=/app
-USER $APP_UID
 ENTRYPOINT ["dotnet", "dispatcher.dll"]

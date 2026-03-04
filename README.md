@@ -87,16 +87,11 @@ docker compose up -d
 
 The dispatcher Dockerfile builds the React app in a stage, so no need to run `npm run build` first. To rebuild after code changes: `docker compose build --no-cache dispatcher` (or `agent`), then `docker compose up -d`.
 
-### Raspberry Pi 32-bit (armhf)
+### Raspberry Pi 32-bit (armhf) — agent only
 
-On 32-bit Raspberry Pi OS, Confluent.Kafka needs the native `librdkafka` library. Both the agent and dispatcher Dockerfiles install it via the distro package on amd64/arm64, and **build it from source** on 32-bit ARM.
+The **dispatcher** runs on **64-bit hosts only** (amd64/arm64). On 32-bit Raspberry Pi, run only the **agent** as a download island.
 
-**Using Docker Compose on the Pi:**
-
-- **Full stack (Redpanda + dispatcher + console) on the Pi:**  
-  `docker compose -f docker-compose.yml -f docker-compose.arm32.yml up -d`
-
-- **Agent only (e.g. Pi as download island):**  
+- **Agent on Pi 32-bit:**  
   `docker compose -f agent/docker-compose.yml -f agent/docker-compose.arm32.yml up -d`
 
-The `*.arm32.yml` overrides set `platform: linux/arm/v7` for the services that need it so images are built for 32-bit ARM. Don’t use these overrides on x64/arm64.
+The agent Dockerfile builds `librdkafka` from source when built for `linux/arm/v7`. Don’t use the arm32 override on x64/arm64.
