@@ -57,7 +57,9 @@ FROM base AS final
 USER root
 COPY --from=librdkafka-native /out/librdkafka.so* /usr/local/lib/
 RUN ldconfig
-USER $APP_UID
 WORKDIR /app
 COPY --from=publish /app/publish .
+COPY --from=librdkafka-native /out/librdkafka.so* /app/
+ENV LD_LIBRARY_PATH=/app
+USER $APP_UID
 ENTRYPOINT ["dotnet", "dispatcher.dll"]
