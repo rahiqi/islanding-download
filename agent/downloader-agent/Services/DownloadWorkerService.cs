@@ -45,7 +45,7 @@ public sealed class DownloadWorkerService : BackgroundService
         _agentId = agentOptions.Value.AgentId!;
         _progressTopic = options.Value.ProgressTopic;
         _progressIntervalMs = options.Value.ProgressIntervalMs;
-
+        _logger.LogInformation("Kafka BootstrapServers: {BootstrapServers}", options.Value.BootstrapServers);
         var consumerConfig = new ConsumerConfig
         {
             BootstrapServers = options.Value.BootstrapServers,
