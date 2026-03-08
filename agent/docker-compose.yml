@@ -15,7 +15,7 @@
 
 services:
   downloader-agent:
-    platform: linux/arm/v7
+    #platform: linux/arm/v7
     build:
       context: ..
       dockerfile: agent/downloader-agent/Dockerfile
