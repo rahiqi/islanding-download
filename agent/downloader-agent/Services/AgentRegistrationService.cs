@@ -45,7 +45,7 @@ public sealed class AgentRegistrationService : BackgroundService
             var response = await client.PostAsync(registerUrl, content, stoppingToken);
             
             var responseContent = await response.Content.ReadAsStringAsync(stoppingToken);
-            _logger.LogDebug("Dispatcher registration response: {ResponseContent}", responseContent);
+            _logger.LogInformation("Dispatcher registration response: {ResponseContent}", responseContent);
 
             response.EnsureSuccessStatusCode();
             _logger.LogInformation("Registered with dispatcher at {DispatcherUrl} as {AgentId} ({Name}, {Location})",
