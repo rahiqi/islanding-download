@@ -79,7 +79,8 @@ From the repository root:
 docker compose up -d
 ```
 
-- **Redpanda** (Kafka API–compatible): internal port 9092 for other containers, external **19092** if you need to connect from the host (e.g. CLI tools).
+- **Redpanda** (Kafka API–compatible): internal port 9092 for other containers, external **19092** if you need to connect from the host (e.g. CLI tools).  
+  **When agents run on other hosts:** set **`REDPANDA_ADVERTISE_EXTERNAL`** to this host’s IP and port (e.g. `192.168.100.28:19092`) so Redpanda advertises that address instead of `localhost:19092`. Otherwise agents will try to connect to `localhost:19092` and fail.
 - **redpanda-init**: one-off job that creates topics `download-queue`, `download-progress`, `agent-heartbeat` with the desired partition counts.
 - **redpanda-console**: Web UI for Redpanda (topics, messages, consumer groups) at **http://localhost:8080**.
 - **dispatcher**: API + React UI (download portal) on port **8084** (open http://localhost:8084).

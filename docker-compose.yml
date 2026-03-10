@@ -1,6 +1,9 @@
 # Islanding Download Portal — run from repository root.
 # Uses Redpanda (Kafka API–compatible) instead of Apache Kafka.
 # The dispatcher image builds the React UI during docker build.
+#
+# When agents run on OTHER hosts, set REDPANDA_ADVERTISE_EXTERNAL to this host's IP:19092
+# (e.g. 192.168.100.28:19092) so clients don't get "localhost:19092" in metadata and fail.
 
 volumes:
   redpanda-data:
@@ -14,7 +17,7 @@ services:
       - --kafka-addr
       - internal://0.0.0.0:9092,external://0.0.0.0:19092
       - --advertise-kafka-addr
-      - internal://redpanda:9092,external://localhost:19092
+      - internal://redpanda:9092,external://${REDPANDA_ADVERTISE_EXTERNAL:-localhost:19092}
       - --rpc-addr
       - redpanda:33145
       - --advertise-rpc-addr

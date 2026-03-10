@@ -61,6 +61,6 @@ public sealed class HeartbeatService : BackgroundService
     {
         var msg = new AgentHeartbeatMessage(_worker.AgentId, DateTime.UtcNow, _worker.CurrentDownloads);
         var json = JsonSerializer.Serialize(msg, _jsonOptions);
-        await _producer.ProduceAsync(_topic, new Message<string, string> { Key = _worker.AgentId, Value = json }, ct);
+       var result =  await _producer.ProduceAsync(_topic, new Message<string, string> { Key = _worker.AgentId, Value = json }, ct);
     }
 }
