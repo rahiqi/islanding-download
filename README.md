@@ -91,7 +91,32 @@ The dispatcher Dockerfile builds the React app in a stage, so no need to run `np
 
 The **dispatcher** runs on **64-bit hosts only** (amd64/arm64). On 32-bit Raspberry Pi, run only the **agent** as a download island.
 
-- **Agent on Pi 32-bit:**  
+Use the same compose entry point and set **`BUILD_ARM32=1`** to use the Pi Dockerfile and platform:
+
+- **Main (64-bit):**  
+  `./agent/compose.sh up -d`  
+  or  
+  `docker compose -f agent/docker-compose.yml up -d`
+
+- **Raspberry Pi 32-bit:**  
+  `BUILD_ARM32=1 ./agent/compose.sh up -d`  
+  or  
   `docker compose -f agent/docker-compose.yml -f agent/docker-compose.arm32.yml up -d`
 
-The agent Dockerfile builds `librdkafka` from source when built for `linux/arm/v7`. Don’t use the arm32 override on x64/arm64.
+On Windows (PowerShell):  
+`$env:BUILD_ARM32=1; .\agent\compose.ps1 up -d`
+
+When `BUILD_ARM32=1`, the agent uses `DockerfileRaspberryPi2` and `platform: linux/arm/v7`. The main compose uses `Dockerfile` and the host platform.
+
+**Portainer (stack from GitHub):** Use a single compose file and set stack env vars for 32-bit:
+
+1. Add stack → Repository URL: your repo, Compose path: **`agent/docker-compose.yml`**.  
+   (Build context is the repo root, so the path must be the path *inside* the repo; Portainer usually clones the repo and uses the path relative to root.)
+
+2. For **Raspberry Pi 32-bit**, add these **Environment variables** in the stack (before deploy):
+   - `AGENT_PLATFORM` = `linux/arm/v7`
+   - `AGENT_DOCKERFILE` = `RaspberryPi2`
+
+3. Also set required vars: `DISPATCHER_URL`, `KAFKA_BOOTSTRAP_SERVERS`, and optionally `AGENT_NAME`, `AGENT_LOCATION`, `AGENT_ID`.
+
+4. Deploy. The same compose file builds and runs the 32-bit image when those two vars are set.

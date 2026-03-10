@@ -1,24 +1,26 @@
 # Downloader agent — run on any node that can reach the dispatcher and Kafka.
-# Build from repository root: docker compose -f agent/docker-compose.yml up -d
+# Build from repository root:
+#
+#   Main (64-bit):  docker compose -f agent/docker-compose.yml up -d
+#   Pi 32-bit:      BUILD_ARM32=1 ./compose.sh up -d   (or use -f docker-compose.arm32.yml)
 #
 # Required env (or set in .env):
 #   DISPATCHER_URL   — dispatcher base URL (e.g. http://dispatcher-host:8084)
 #   KAFKA_BOOTSTRAP_SERVERS — Kafka/Redpanda brokers (e.g. kafka-host:9092)
 #
 # Optional:
-#   AGENT_NAME      — display name for this node
-#   AGENT_LOCATION  — location/datacenter
-#   AGENT_ID        — stable id (default: machine name + random suffix)
+#   AGENT_NAME, AGENT_LOCATION, AGENT_ID
 #
-# Raspberry Pi 32-bit: use override so image is arm/v7:
-#   docker compose -f agent/docker-compose.yml -f agent/docker-compose.arm32.yml up -d
+# Target platform (for Portainer / single-file use):
+#   Raspberry Pi 32-bit: set AGENT_PLATFORM=linux/arm/v7 and AGENT_DOCKERFILE=RaspberryPi2 in the stack env.
+#   Main (64-bit): leave both unset.
 
 services:
   downloader-agent:
-    #platform: linux/arm/v7
+    platform: ${AGENT_PLATFORM:-}
     build:
       context: ..
-      dockerfile: agent/downloader-agent/Dockerfile
+      dockerfile: agent/downloader-agent/Dockerfile${AGENT_DOCKERFILE:-}
     environment:
       ASPNETCORE_URLS: http://+:8080
       DISPATCHER_URL: ${DISPATCHER_URL:?DISPATCHER_URL is required}

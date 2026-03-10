@@ -1,6 +1,10 @@
 # Override for Raspberry Pi 32-bit. Use from repo root:
-#   docker compose -f agent/docker-compose.yml -f agent/docker-compose.arm32.yml up -d
+#   BUILD_ARM32=1 docker compose -f agent/docker-compose.yml -f agent/docker-compose.arm32.yml up -d
+# Or: ./compose.sh up -d  (with BUILD_ARM32=1 in env for Pi)
 
 services:
   downloader-agent:
     platform: linux/arm/v7
+    build:
+      context: ..
+      dockerfile: agent/downloader-agent/DockerfileRaspberryPi2
