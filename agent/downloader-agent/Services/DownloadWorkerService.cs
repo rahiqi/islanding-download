@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Confluent.Kafka;
@@ -23,6 +24,53 @@ internal static class TopicNames
     private static readonly Regex Sanitize = new(@"[^a-zA-Z0-9._-]", RegexOptions.Compiled);
     public static string AgentSpecificTopic(string baseTopic, string agentId) =>
         baseTopic + "-" + Sanitize.Replace(agentId, "_");
+}
+
+internal static class DownloadFileName
+{
+    private static readonly Regex SanitizeFileName = new(@"[^\w\s.\-()\[\]&'+]", RegexOptions.Compiled);
+    private static readonly Regex CollapseSpaces = new(@"\s+", RegexOptions.Compiled);
+
+    /// <summary>Resolves a safe file name from response Content-Disposition and URL path; falls back to fallbackId if none.</summary>
+    public static string Resolve(HttpContentHeaders contentHeaders, string url, string fallbackId)
+    {
+        var fromHeader = GetFileNameFromContentDisposition(contentHeaders.ContentDisposition);
+        if (!string.IsNullOrWhiteSpace(fromHeader))
+            return Sanitize(fromHeader);
+        if (!string.IsNullOrWhiteSpace(url) && Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            var segment = uri.Segments.Length > 0 ? uri.Segments[^1] : null;
+            var fromUrl = string.IsNullOrEmpty(segment) ? null : Uri.UnescapeDataString(segment).Trim();
+            if (!string.IsNullOrWhiteSpace(fromUrl))
+                return Sanitize(fromUrl);
+        }
+        return fallbackId;
+    }
+
+    private static string? GetFileNameFromContentDisposition(ContentDispositionHeaderValue? contentDisposition)
+    {
+        if (contentDisposition == null)
+            return null;
+        if (!string.IsNullOrWhiteSpace(contentDisposition.FileName))
+            return contentDisposition.FileName.Trim().Trim('"');
+        if (contentDisposition.ToString() is { } raw)
+        {
+            var star = Regex.Match(raw, @"filename\*\s*=\s*(?:UTF-8'')?([^;\s]+)", RegexOptions.IgnoreCase);
+            if (star.Success)
+                return Uri.UnescapeDataString(star.Groups[1].Value.Trim().Trim('"'));
+        }
+        return null;
+    }
+
+    private static string Sanitize(string name)
+    {
+        var noPath = Path.GetFileName(name);
+        if (string.IsNullOrWhiteSpace(noPath))
+            return "download";
+        var sanitized = SanitizeFileName.Replace(noPath, "_");
+        sanitized = CollapseSpaces.Replace(sanitized.Trim(), " ");
+        return string.IsNullOrWhiteSpace(sanitized) || sanitized == "." ? "download" : sanitized;
+    }
 }
 
 public sealed class DownloadWorkerService : BackgroundService
@@ -126,9 +174,13 @@ public sealed class DownloadWorkerService : BackgroundService
         using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
         var totalBytes = response.Content.Headers.ContentLength;
+        var fileName = DownloadFileName.Resolve(response.Content.Headers, url, downloadId);
+        var dirPath = Path.Combine(_downloadPath, downloadId);
+        Directory.CreateDirectory(dirPath);
+        var filePath = Path.Combine(dirPath, fileName);
+
         await SendProgressAsync(downloadId, 0, 0, 0, "Downloading", null, null, ct);
 
-        var filePath = Path.Combine(_downloadPath, downloadId);
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read, 81920, FileOptions.Asynchronous);
         var buffer = new byte[81920];

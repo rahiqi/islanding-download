@@ -81,11 +81,29 @@ app.MapGet("/downloads/{downloadId}", (string downloadId, IOptions<DownloadWorke
 {
     if (string.IsNullOrWhiteSpace(downloadId) || downloadId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
         return Results.BadRequest();
-    var path = Path.Combine(Path.GetFullPath(options.Value.DownloadPath), downloadId);
-    if (!Path.Exists(path) || !File.Exists(path))
+    var basePath = Path.GetFullPath(options.Value.DownloadPath);
+    var path = Path.Combine(basePath, downloadId);
+    if (!Path.Exists(path))
         return Results.NotFound();
-    var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-    return Results.File(stream, "application/octet-stream", downloadId, enableRangeProcessing: true);
+    string filePath;
+    string downloadFileName;
+    if (Directory.Exists(path))
+    {
+        var files = Directory.GetFiles(path);
+        if (files.Length == 0)
+            return Results.NotFound();
+        filePath = files[0];
+        downloadFileName = Path.GetFileName(filePath);
+    }
+    else
+    {
+        filePath = path;
+        downloadFileName = downloadId;
+    }
+    if (!File.Exists(filePath))
+        return Results.NotFound();
+    var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+    return Results.File(stream, "application/octet-stream", downloadFileName, enableRangeProcessing: true);
 });
 
 app.Run();
