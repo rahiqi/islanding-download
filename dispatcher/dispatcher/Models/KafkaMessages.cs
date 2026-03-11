@@ -16,7 +16,8 @@ public record DownloadProgressMessage(
     double BytesPerSecond,
     string Status, // Downloading, Completed, Failed
     string? Message = null,
-    DateTime? Timestamp = null
+    DateTime? Timestamp = null,
+    string? LocalDownloadUrl = null
 );
 
 /// <summary>Consumed from agent-heartbeat.</summary>

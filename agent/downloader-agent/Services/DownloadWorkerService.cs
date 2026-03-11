@@ -14,6 +14,8 @@ public class DownloadWorkerOptions
     public string ProgressTopic { get; set; } = "download-progress";
     public string GroupId { get; set; } = "download-agents";
     public int ProgressIntervalMs { get; set; } = 200;
+    /// <summary>Directory where completed downloads are saved (e.g. ./downloads).</summary>
+    public string DownloadPath { get; set; } = "downloads";
 }
 
 internal static class TopicNames
@@ -31,6 +33,8 @@ public sealed class DownloadWorkerService : BackgroundService
     private readonly string _agentId;
     private readonly string _progressTopic;
     private readonly int _progressIntervalMs;
+    private readonly string _downloadPath;
+    private readonly string _localServeBaseUrl;
     private readonly ILogger<DownloadWorkerService> _logger;
     private readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private int _currentDownloads;
@@ -45,7 +49,10 @@ public sealed class DownloadWorkerService : BackgroundService
         _agentId = agentOptions.Value.AgentId!;
         _progressTopic = options.Value.ProgressTopic;
         _progressIntervalMs = options.Value.ProgressIntervalMs;
-        _logger.LogInformation("Kafka BootstrapServers: {BootstrapServers}", options.Value.BootstrapServers);
+        _downloadPath = Path.GetFullPath(options.Value.DownloadPath);
+        _localServeBaseUrl = (agentOptions.Value.LocalServeBaseUrl ?? "").TrimEnd('/');
+        Directory.CreateDirectory(_downloadPath);
+        _logger.LogInformation("Kafka BootstrapServers: {BootstrapServers}, DownloadPath: {DownloadPath}", options.Value.BootstrapServers, _downloadPath);
         var consumerConfig = new ConsumerConfig
         {
             BootstrapServers = options.Value.BootstrapServers,
@@ -107,7 +114,7 @@ public sealed class DownloadWorkerService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Download failed {DownloadId}", msg.DownloadId);
-            await SendProgressAsync(msg.DownloadId, 0, 0, 0, "Failed", ex.Message, ct);
+            await SendProgressAsync(msg.DownloadId, 0, 0, 0, "Failed", ex.Message, null, ct);
         }
         finally
         {
@@ -120,9 +127,11 @@ public sealed class DownloadWorkerService : BackgroundService
         using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
         var totalBytes = response.Content.Headers.ContentLength;
-        await SendProgressAsync(downloadId, 0, 0, 0, "Downloading", null, ct);
+        await SendProgressAsync(downloadId, 0, 0, 0, "Downloading", null, null, ct);
 
+        var filePath = Path.Combine(_downloadPath, downloadId);
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read, 81920, FileOptions.Asynchronous);
         var buffer = new byte[81920];
         long downloaded = 0;
         var sw = Stopwatch.StartNew();
@@ -133,25 +142,27 @@ public sealed class DownloadWorkerService : BackgroundService
             var read = await stream.ReadAsync(buffer, ct);
             if (read == 0)
                 break;
+            await fileStream.WriteAsync(buffer.AsMemory(0, read), ct);
             downloaded += read;
             var elapsed = sw.Elapsed.TotalSeconds;
             var rate = elapsed > 0 ? downloaded / elapsed : 0;
 
             if (lastProgressSend.ElapsedMilliseconds >= _progressIntervalMs)
             {
-                await SendProgressAsync(downloadId, totalBytes, downloaded, rate, "Downloading", null, ct);
+                await SendProgressAsync(downloadId, totalBytes, downloaded, rate, "Downloading", null, null, ct);
                 lastProgressSend.Restart();
             }
         }
 
         var finalRate = sw.Elapsed.TotalSeconds > 0 ? downloaded / sw.Elapsed.TotalSeconds : 0;
-        await SendProgressAsync(downloadId, totalBytes ?? downloaded, downloaded, finalRate, "Completed", null, ct);
-        _logger.LogInformation("Completed download {DownloadId}: {Bytes} bytes", downloadId, downloaded);
+        var localUrl = string.IsNullOrEmpty(_localServeBaseUrl) ? null : $"{_localServeBaseUrl}/downloads/{downloadId}";
+        await SendProgressAsync(downloadId, totalBytes ?? downloaded, downloaded, finalRate, "Completed", null, localUrl, ct);
+        _logger.LogInformation("Completed download {DownloadId}: {Bytes} bytes, local URL: {LocalUrl}", downloadId, downloaded, localUrl ?? "(none)");
     }
 
-    private async Task SendProgressAsync(string downloadId, long? totalBytes, long downloadedBytes, double bytesPerSecond, string status, string? message, CancellationToken ct)
+    private async Task SendProgressAsync(string downloadId, long? totalBytes, long downloadedBytes, double bytesPerSecond, string status, string? message, string? localDownloadUrl, CancellationToken ct)
     {
-        var msg = new DownloadProgressMessage(downloadId, _agentId, totalBytes, downloadedBytes, bytesPerSecond, status, message, DateTime.UtcNow);
+        var msg = new DownloadProgressMessage(downloadId, _agentId, totalBytes, downloadedBytes, bytesPerSecond, status, message, DateTime.UtcNow, localDownloadUrl);
         var json = JsonSerializer.Serialize(msg, _jsonOptions);
         await _progressProducer.ProduceAsync(_progressTopic, new Message<string, string> { Key = downloadId, Value = json }, ct);
     }

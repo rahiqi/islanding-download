@@ -295,3 +295,17 @@ section h2 {
   font-size: 0.85rem;
   color: var(--error);
 }
+
+.local-download {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.9rem;
+}
+
+.local-download-link {
+  color: var(--success);
+  font-weight: 500;
+}
+
+.local-download-link:hover {
+  text-decoration: underline;
+}

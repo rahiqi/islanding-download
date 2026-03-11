@@ -8,5 +8,6 @@ public record DownloadProgressMessage(
     double BytesPerSecond,
     string Status,
     string? Message = null,
-    DateTime? Timestamp = null
+    DateTime? Timestamp = null,
+    string? LocalDownloadUrl = null
 );

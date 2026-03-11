@@ -11,7 +11,8 @@ public record DownloadState(
     string? AgentId = null,
     string? PreferredAgentId = null,
     string? ErrorMessage = null,
-    DateTime? CompletedAt = null
+    DateTime? CompletedAt = null,
+    string? LocalDownloadUrl = null
 )
 {
     public double PercentComplete =>

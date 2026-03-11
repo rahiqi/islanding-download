@@ -54,6 +54,13 @@ export function DownloadList({ downloads }: DownloadListProps) {
               </div>
             </div>
             {d.errorMessage && <p className="error-message">{d.errorMessage}</p>}
+            {d.status === 'Completed' && d.localDownloadUrl && (
+              <p className="local-download">
+                <a href={d.localDownloadUrl} target="_blank" rel="noopener noreferrer" className="local-download-link">
+                  Download from agent (local)
+                </a>
+              </p>
+            )}
           </li>
         ))}
       </ul>

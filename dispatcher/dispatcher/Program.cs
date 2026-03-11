@@ -84,7 +84,8 @@ downloadsApi.MapGet("/events", async (HttpContext ctx, IProgressBroadcaster broa
             msg.DownloadedBytes,
             msg.BytesPerSecond,
             msg.Status,
-            msg.Message
+            msg.Message,
+            msg.LocalDownloadUrl
         }, jsonOptions);
         await ctx.Response.WriteAsync("data: " + data + "\n\n", ctx.RequestAborted);
         await ctx.Response.Body.FlushAsync(ctx.RequestAborted);

@@ -5,7 +5,7 @@ Scalable download portal: **Dispatcher** (entry point + UI) enqueues URLs to Kaf
 ## Architecture
 
 - **Dispatcher** (.NET 10, Web API + React): accepts download URLs, produces to `download-queue`, consumes `download-progress` and `agent-heartbeat`, serves the UI and exposes SSE for live progress.
-- **Agents** (.NET 10): consume `download-queue`, download files, produce progress to `download-progress` and heartbeats to `agent-heartbeat`.
+- **Agents** (.NET 10): consume `download-queue`, download files to disk, produce progress to `download-progress` and heartbeats to `agent-heartbeat`. When **AGENT_LOCAL_URL** is set, completed downloads are served at `{AGENT_LOCAL_URL}/downloads/{downloadId}` (access restricted to local/private IPs), and the portal shows a “Download from agent (local)” link.
 
 ## Prerequisites
 

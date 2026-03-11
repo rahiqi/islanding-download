@@ -55,7 +55,7 @@ public sealed class ProgressConsumerHostedService : BackgroundService
                     var msg = JsonSerializer.Deserialize<DownloadProgressMessage>(json, JsonOptions);
                     if (msg is null)
                         continue;
-                    _store.UpdateProgress(msg.DownloadId, msg.TotalBytes, msg.DownloadedBytes, msg.BytesPerSecond, msg.Status, msg.AgentId, msg.Message);
+                    _store.UpdateProgress(msg.DownloadId, msg.TotalBytes, msg.DownloadedBytes, msg.BytesPerSecond, msg.Status, msg.AgentId, msg.Message, msg.LocalDownloadUrl);
                     _broadcaster.Broadcast(msg);
                 }
                 catch (ConsumeException ex)

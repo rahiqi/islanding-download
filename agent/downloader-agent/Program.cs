@@ -12,6 +12,9 @@ builder.Services.PostConfigure<DownloadWorkerOptions>(options =>
     var bootstrap = Environment.GetEnvironmentVariable("KAFKA_BOOTSTRAP_SERVERS");
     if (!string.IsNullOrWhiteSpace(bootstrap))
         options.BootstrapServers = bootstrap.Trim();
+    var path = Environment.GetEnvironmentVariable("AGENT_DOWNLOAD_PATH");
+    if (!string.IsNullOrWhiteSpace(path))
+        options.DownloadPath = path.Trim();
 });
 builder.Services.PostConfigure<HeartbeatOptions>(options =>
 {
@@ -29,6 +32,8 @@ builder.Services.PostConfigure<AgentOptions>(options =>
         options.Location = Environment.GetEnvironmentVariable("AGENT_LOCATION") ?? "";
     if (string.IsNullOrWhiteSpace(options.AgentId))
         options.AgentId = Environment.GetEnvironmentVariable("AGENT_ID") ?? Environment.MachineName + "-" + Guid.NewGuid().ToString("N")[..8];
+    if (string.IsNullOrWhiteSpace(options.LocalServeBaseUrl))
+        options.LocalServeBaseUrl = (Environment.GetEnvironmentVariable("AGENT_LOCAL_URL") ?? "").TrimEnd('/');
 });
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<DownloadWorkerService>();
@@ -38,6 +43,24 @@ builder.Services.AddHostedService<HeartbeatService>();
 
 var app = builder.Build();
 
+// Restrict /downloads/* to local/private IPs only (no internet-routed access)
+app.UseWhen(
+    ctx => ctx.Request.Path.StartsWithSegments("/downloads", StringComparison.OrdinalIgnoreCase),
+    appBuilder =>
+    {
+        appBuilder.Use(async (ctx, next) =>
+        {
+            var remote = ctx.Connection.RemoteIpAddress;
+            if (remote is null || !IsPrivateOrLoopback(remote))
+            {
+                ctx.Response.StatusCode = 403;
+                await ctx.Response.WriteAsync("Access allowed only from local/private network.");
+                return;
+            }
+            await next(ctx);
+        });
+    });
+
 app.MapGet("/", () => new
 {
     service = "download-agent",
@@ -45,4 +68,26 @@ app.MapGet("/", () => new
 });
 app.MapGet("/health", () => Results.Ok());
 
+app.MapGet("/downloads/{downloadId}", (string downloadId, IOptions<DownloadWorkerOptions> options) =>
+{
+    if (string.IsNullOrWhiteSpace(downloadId) || downloadId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        return Results.BadRequest();
+    var path = Path.Combine(Path.GetFullPath(options.Value.DownloadPath), downloadId);
+    if (!Path.Exists(path) || !File.Exists(path))
+        return Results.NotFound();
+    var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+    return Results.File(stream, "application/octet-stream", downloadId, enableRangeProcessing: true);
+});
+
 app.Run();
+
+static bool IsPrivateOrLoopback(System.Net.IPAddress ip)
+{
+    if (System.Net.IPAddress.IsLoopback(ip)) return true;
+    var bytes = ip.GetAddressBytes();
+    if (bytes.Length == 4) // IPv4
+        return bytes[0] == 10 || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) || (bytes[0] == 192 && bytes[1] == 168);
+    if (bytes.Length == 16) // IPv6: ::1 and fd00::/8 (ULA)
+        return bytes[15] == 1 && bytes.Take(15).All(b => b == 0) || bytes[0] == 0xfd;
+    return false;
+}

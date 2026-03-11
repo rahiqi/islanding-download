@@ -15,4 +15,7 @@ public class AgentOptions
 
     /// <summary>Optional stable agent id; if empty, one is generated at startup.</summary>
     public string? AgentId { get; set; }
+
+    /// <summary>Base URL for local file serving (e.g. http://192.168.1.10:8080). Set via AGENT_LOCAL_URL. Used to build the local download link reported to the dispatcher.</summary>
+    public string LocalServeBaseUrl { get; set; } = "";
 }

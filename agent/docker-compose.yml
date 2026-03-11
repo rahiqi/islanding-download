@@ -10,6 +10,9 @@
 #
 # Optional:
 #   AGENT_NAME, AGENT_LOCATION, AGENT_ID
+#   AGENT_LOCAL_URL — base URL for local file serving (e.g. http://192.168.1.10:8080). If set, completed
+#                     downloads get a "Download from agent (local)" link; /downloads/* is restricted to private IPs.
+#   AGENT_DOWNLOAD_PATH — directory to store completed files (default: downloads).
 #
 # Target platform (for Portainer / single-file use):
 #   Raspberry Pi 32-bit: set AGENT_PLATFORM=linux/arm/v7 and AGENT_DOCKERFILE=RaspberryPi2 in the stack env.
@@ -29,6 +32,8 @@ services:
       AGENT_ID: ${AGENT_ID:-}
       DownloadWorker__BootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS is required}
       Heartbeat__BootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS}
-    # Optional: expose health for orchestration
-    # ports:
-    #   - "8080:8080"
+      AGENT_LOCAL_URL: ${AGENT_LOCAL_URL:-}
+      AGENT_DOWNLOAD_PATH: ${AGENT_DOWNLOAD_PATH:-downloads}
+    # Expose 8080 so users on the local network can use the "Download from agent" link (AGENT_LOCAL_URL).
+    ports:
+      - "8080:8080"

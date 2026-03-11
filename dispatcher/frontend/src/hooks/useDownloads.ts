@@ -34,6 +34,7 @@ export function useDownloads() {
                   status: ev.status as DownloadState['status'],
                   agentId: ev.agentId ?? d.agentId,
                   errorMessage: ev.message ?? d.errorMessage,
+                  localDownloadUrl: ev.localDownloadUrl ?? d.localDownloadUrl,
                   percentComplete:
                     (ev.totalBytes ?? 0) > 0
                       ? Math.min(100, (100 * ev.downloadedBytes) / (ev.totalBytes ?? 1))

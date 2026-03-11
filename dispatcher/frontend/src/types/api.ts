@@ -11,6 +11,8 @@ export interface DownloadState {
   errorMessage: string | null
   completedAt: string | null
   percentComplete: number
+  /** Local URL on the agent to download the file (only when status is Completed and agent serves it). */
+  localDownloadUrl: string | null
 }
 
 export interface AgentInfo {
@@ -29,4 +31,5 @@ export interface ProgressEvent {
   bytesPerSecond: number
   status: string
   message: string | null
+  localDownloadUrl: string | null
 }

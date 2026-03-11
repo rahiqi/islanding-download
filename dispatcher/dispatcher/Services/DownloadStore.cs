@@ -13,7 +13,7 @@ public sealed class DownloadStore : IDownloadStore
 
     public IReadOnlyList<DownloadState> GetAll() => _downloads.Values.OrderByDescending(d => d.EnqueuedAt).ToList();
 
-    public void UpdateProgress(string downloadId, long? totalBytes, long downloadedBytes, double bytesPerSecond, string status, string? agentId = null, string? message = null)
+    public void UpdateProgress(string downloadId, long? totalBytes, long downloadedBytes, double bytesPerSecond, string status, string? agentId = null, string? message = null, string? localDownloadUrl = null)
     {
         if (!_downloads.TryGetValue(downloadId, out var existing))
             return;
@@ -26,7 +26,8 @@ public sealed class DownloadStore : IDownloadStore
             Status = status,
             AgentId = agentId ?? existing.AgentId,
             ErrorMessage = message ?? existing.ErrorMessage,
-            CompletedAt = status is "Completed" or "Failed" ? DateTime.UtcNow : existing.CompletedAt
+            CompletedAt = status is "Completed" or "Failed" ? DateTime.UtcNow : existing.CompletedAt,
+            LocalDownloadUrl = localDownloadUrl ?? existing.LocalDownloadUrl
         };
         _downloads[downloadId] = updated;
     }
