@@ -34,6 +34,6 @@ services:
       Heartbeat__BootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS}
       AGENT_LOCAL_URL: ${AGENT_LOCAL_URL:-}
       AGENT_DOWNLOAD_PATH: ${AGENT_DOWNLOAD_PATH:-downloads}
-    # Expose 8080 so users on the local network can use the "Download from agent" link (AGENT_LOCAL_URL).
+    # Expose 8081 so users on the local network can use the "Download from agent" link (AGENT_LOCAL_URL).
     ports:
-      - "8080:8080"
+      - "${AGENT_PORT:-8081}:8080"
