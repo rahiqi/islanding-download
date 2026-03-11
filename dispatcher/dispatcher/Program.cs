@@ -106,6 +106,7 @@ app.MapPost("/api/agents/register", async (AgentRegisterRequest? request, IAgent
     if (request is null || string.IsNullOrWhiteSpace(request.AgentId))
         return Results.BadRequest(new { error = "Request body must contain a non-empty 'agentId'." });
     await topicEnsurer.EnsureAgentTopicsAsync(ct);
+    await topicEnsurer.EnsureAgentDownloadQueueTopicAsync(request.AgentId.Trim(), ct);
     agentStore.RegisterAgent(request.AgentId.Trim(), request.Name?.Trim() ?? "", request.Location?.Trim() ?? "");
     return Results.Ok(new { agentId = request.AgentId });
 })
