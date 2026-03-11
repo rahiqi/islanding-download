@@ -1,3 +1,4 @@
+using System.Net;
 using downloader_agent.Services;
 using Microsoft.Extensions.Options;
 
@@ -36,6 +37,14 @@ builder.Services.PostConfigure<AgentOptions>(options =>
         options.LocalServeBaseUrl = (Environment.GetEnvironmentVariable("AGENT_LOCAL_URL") ?? "").TrimEnd('/');
 });
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient(ChromeDownloadHeaders.HttpClientName, client =>
+{
+    ChromeDownloadHeaders.Apply(client);
+    client.Timeout = TimeSpan.FromHours(2);
+}).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+{
+    AutomaticDecompression = DecompressionMethods.All
+});
 builder.Services.AddSingleton<DownloadWorkerService>();
 builder.Services.AddHostedService<AgentRegistrationService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DownloadWorkerService>());
