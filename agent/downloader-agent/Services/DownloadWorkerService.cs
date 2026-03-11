@@ -116,7 +116,7 @@ public sealed class DownloadWorkerService : BackgroundService
         var producerConfig = new ProducerConfig { BootstrapServers = options.Value.BootstrapServers };
         _progressProducer = new ProducerBuilder<string, string>(producerConfig).Build();
 
-        _httpClient = httpClientFactory.CreateClient(ChromeDownloadHeaders.HttpClientName);
+        _httpClient = httpClientFactory.CreateClient(/*ChromeDownloadHeaders.HttpClientName*/);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

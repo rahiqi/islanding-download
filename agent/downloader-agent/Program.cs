@@ -52,23 +52,6 @@ builder.Services.AddHostedService<HeartbeatService>();
 
 var app = builder.Build();
 
-// Restrict /downloads/* to local/private IPs only (no internet-routed access)
-app.UseWhen(
-    ctx => ctx.Request.Path.StartsWithSegments("/downloads", StringComparison.OrdinalIgnoreCase),
-    appBuilder =>
-    {
-        appBuilder.Use(async (ctx, next) =>
-        {
-            var remote = ctx.Connection.RemoteIpAddress;
-            if (remote is null || !IsPrivateOrLoopback(remote))
-            {
-                ctx.Response.StatusCode = 403;
-                await ctx.Response.WriteAsync("Access allowed only from local/private network.");
-                return;
-            }
-            await next(ctx);
-        });
-    });
 
 app.MapGet("/", () => new
 {
