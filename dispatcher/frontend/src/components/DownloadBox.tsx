@@ -23,9 +23,10 @@ export function DownloadBox({ agents, onSubmit, loading, error }: DownloadBoxPro
     [url, preferredAgentId, onSubmit]
   )
 
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData('text').trim()
     if (text && (text.startsWith('http://') || text.startsWith('https://'))) {
+      e.preventDefault()
       setUrl(text)
     }
   }, [])
