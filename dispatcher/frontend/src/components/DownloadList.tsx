@@ -11,9 +11,9 @@ function formatBytes(n: number): string {
   return `${(n / Math.pow(k, i)).toFixed(1)} ${['B', 'KB', 'MB', 'GB'][i]}`
 }
 
-function formatRate(bytesPerSecond: number): string {
-  return `${formatBytes(bytesPerSecond)}/s`
-}
+// function formatRate(bytesPerSecond: number): string {
+//   return `${formatBytes(bytesPerSecond)}/s`
+// }
 
 export function DownloadList({ downloads }: DownloadListProps) {
   if (downloads.length === 0) {
@@ -46,7 +46,7 @@ export function DownloadList({ downloads }: DownloadListProps) {
                   {formatBytes(d.downloadedBytes)}
                   {d.totalBytes > 0 && ` / ${formatBytes(d.totalBytes)}`}
                 </span>
-              
+                
                 {d.preferredAgentId && !d.agentId && <span className="agent requested">Requested: {d.preferredAgentId}</span>}
                 {d.agentId && <span className="agent">Agent: {d.agentId}</span>}
               </div>
