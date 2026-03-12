@@ -204,6 +204,54 @@ section h2 {
   border-color: var(--error);
 }
 
+.download-list li[data-status='Paused'] {
+  border-color: var(--muted);
+}
+
+.download-list li[data-status='Cancelled'] {
+  border-color: var(--muted);
+}
+
+.download-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.download-actions button {
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.download-actions button:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.download-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.download-actions .btn-resume {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.download-actions .btn-pause {
+  border-color: var(--muted);
+}
+
+.download-actions .btn-cancel {
+  border-color: var(--error);
+  color: var(--error);
+}
+
 .download-row {
   display: flex;
   align-items: center;

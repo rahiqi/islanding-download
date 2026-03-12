@@ -1,7 +1,7 @@
 export interface DownloadState {
   downloadId: string
   url: string
-  status: 'Queued' | 'Downloading' | 'Completed' | 'Failed'
+  status: 'Queued' | 'Downloading' | 'Paused' | 'Completed' | 'Failed' | 'Cancelled'
   enqueuedAt: string
   totalBytes: number
   downloadedBytes: number

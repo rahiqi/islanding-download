@@ -3,5 +3,6 @@ namespace downloader_agent.Models;
 public record DownloadQueueMessage(
     string DownloadId,
     string Url,
-    DateTime EnqueuedAt
+    DateTime EnqueuedAt,
+    long? StartByte = null
 );

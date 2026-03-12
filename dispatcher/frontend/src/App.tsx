@@ -6,7 +6,7 @@ import { useAgents } from './hooks/useAgents'
 import './App.css'
 
 function App() {
-  const { downloads, error: downloadError, loading, addDownload } = useDownloads()
+  const { downloads, error: downloadError, loading, addDownload, refresh } = useDownloads()
   const { agents, error: agentsError } = useAgents()
 
   return (
@@ -18,7 +18,7 @@ function App() {
       <main>
         <DownloadBox agents={agents} onSubmit={addDownload} loading={loading} error={downloadError} />
         <AgentList agents={agents} error={agentsError} />
-        <DownloadList downloads={downloads} />
+        <DownloadList downloads={downloads} onRefresh={refresh} />
       </main>
     </div>
   )

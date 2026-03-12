@@ -33,3 +33,21 @@ export async function listAgents(): Promise<AgentInfo[]> {
 export function getProgressEventSource(): EventSource {
   return new EventSource(`${base}/api/downloads/events`)
 }
+
+export async function pauseDownload(downloadId: string): Promise<void> {
+  const res = await fetch(`${base}/api/downloads/${downloadId}/pause`, { method: 'POST' })
+  if (!res.ok) throw new Error(res.status === 404 ? 'Download not found' : 'Failed to pause')
+}
+
+export async function resumeDownload(downloadId: string): Promise<void> {
+  const res = await fetch(`${base}/api/downloads/${downloadId}/resume`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.error ?? 'Failed to resume')
+  }
+}
+
+export async function cancelDownload(downloadId: string): Promise<void> {
+  const res = await fetch(`${base}/api/downloads/${downloadId}/cancel`, { method: 'POST' })
+  if (!res.ok) throw new Error(res.status === 404 ? 'Download not found' : 'Failed to cancel')
+}
