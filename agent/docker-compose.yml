@@ -21,7 +21,7 @@ volumes:
   downloads:
 services:
   downloader-agent:
-    platform: ${AGENT_PLATFORM:-}
+    platform: linux/arm/v7
     volumes:
       - downloads:/app/downloads
     build:
