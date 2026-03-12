@@ -34,6 +34,72 @@ header {
   margin-bottom: 2rem;
 }
 
+.header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.auth-box {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.auth-user {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.auth-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.auth-form input {
+  padding: 0.4rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  width: 140px;
+}
+
+.auth-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.auth-form button {
+  padding: 0.4rem 0.75rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn-logout {
+  padding: 0.35rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.btn-logout:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
 header h1 {
   font-size: 1.75rem;
   font-weight: 600;
@@ -331,6 +397,11 @@ section h2 {
 
 .progress-meta .rate {
   color: var(--accent);
+}
+
+.progress-meta .queued-by {
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .progress-meta .agent {

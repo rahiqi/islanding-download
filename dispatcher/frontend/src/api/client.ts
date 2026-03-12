@@ -1,6 +1,32 @@
 import type { DownloadState, AgentInfo } from '../types/api'
 
 const base = ''
+const fetchOpts = { credentials: 'include' as RequestCredentials }
+
+export async function getCurrentUser(): Promise<{ username: string } | null> {
+  const res = await fetch(`${base}/api/auth/me`, fetchOpts)
+  if (res.status === 401) return null
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function login(username: string): Promise<{ username: string }> {
+  const res = await fetch(`${base}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: username.trim() }),
+    ...fetchOpts,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.error ?? 'Login failed')
+  }
+  return res.json()
+}
+
+export async function logout(): Promise<void> {
+  await fetch(`${base}/api/auth/logout`, { method: 'POST', ...fetchOpts })
+}
 
 export async function submitDownload(
   url: string,
@@ -10,6 +36,7 @@ export async function submitDownload(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, preferredAgentId: preferredAgentId || undefined }),
+    ...fetchOpts,
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -19,7 +46,7 @@ export async function submitDownload(
 }
 
 export async function listDownloads(): Promise<DownloadState[]> {
-  const res = await fetch(`${base}/api/downloads`)
+  const res = await fetch(`${base}/api/downloads`, fetchOpts)
   if (!res.ok) throw new Error('Failed to fetch downloads')
   return res.json()
 }
@@ -35,12 +62,12 @@ export function getProgressEventSource(): EventSource {
 }
 
 export async function pauseDownload(downloadId: string): Promise<void> {
-  const res = await fetch(`${base}/api/downloads/${downloadId}/pause`, { method: 'POST' })
+  const res = await fetch(`${base}/api/downloads/${downloadId}/pause`, { method: 'POST', ...fetchOpts })
   if (!res.ok) throw new Error(res.status === 404 ? 'Download not found' : 'Failed to pause')
 }
 
 export async function resumeDownload(downloadId: string): Promise<void> {
-  const res = await fetch(`${base}/api/downloads/${downloadId}/resume`, { method: 'POST' })
+  const res = await fetch(`${base}/api/downloads/${downloadId}/resume`, { method: 'POST', ...fetchOpts })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err?.error ?? 'Failed to resume')
@@ -48,6 +75,6 @@ export async function resumeDownload(downloadId: string): Promise<void> {
 }
 
 export async function cancelDownload(downloadId: string): Promise<void> {
-  const res = await fetch(`${base}/api/downloads/${downloadId}/cancel`, { method: 'POST' })
+  const res = await fetch(`${base}/api/downloads/${downloadId}/cancel`, { method: 'POST', ...fetchOpts })
   if (!res.ok) throw new Error(res.status === 404 ? 'Download not found' : 'Failed to cancel')
 }

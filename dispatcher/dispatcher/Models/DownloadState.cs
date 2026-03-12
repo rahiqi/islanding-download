@@ -10,6 +10,7 @@ public record DownloadState(
     double BytesPerSecond = 0,
     string? AgentId = null,
     string? PreferredAgentId = null,
+    string? QueuedBy = null,
     string? ErrorMessage = null,
     DateTime? CompletedAt = null,
     string? LocalDownloadUrl = null

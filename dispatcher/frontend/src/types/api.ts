@@ -8,6 +8,7 @@ export interface DownloadState {
   bytesPerSecond: number
   agentId: string | null
   preferredAgentId: string | null
+  queuedBy: string | null
   errorMessage: string | null
   completedAt: string | null
   percentComplete: number

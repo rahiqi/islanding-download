@@ -1,10 +1,22 @@
+using System.Security.Claims;
 using System.Text.Json;
 using dispatcher.Models;
 using dispatcher.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Cookie auth (simple username-only login)
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "download-portal.auth";
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.LoginPath = "/api/auth/me"; // used for redirect; we use API only
+    });
 
 // Stores and broadcast
 builder.Services.AddSingleton<IDownloadStore, DownloadStore>();
@@ -30,7 +42,9 @@ builder.Services.AddCors();
 
 var app = builder.Build();
 
-app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader().AllowCredentials());
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapOpenApi();
 
 var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -38,14 +52,18 @@ var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingP
 // --- Downloads API ---
 var downloadsApi = app.MapGroup("/api/downloads");
 
-downloadsApi.MapPost("/", async (DownloadSubmitRequest request, IDownloadStore store, IKafkaDownloadProducer producer, CancellationToken ct) =>
+downloadsApi.MapPost("/", async (HttpContext ctx, DownloadSubmitRequest request, IDownloadStore store, IKafkaDownloadProducer producer, CancellationToken ct) =>
 {
+    var username = ctx.User.Identity?.IsAuthenticated == true ? ctx.User.Identity.Name : null;
+    if (string.IsNullOrWhiteSpace(username))
+        return Results.Json(new { error = "You must be logged in to queue a download." }, statusCode: 401);
+
     if (string.IsNullOrWhiteSpace(request.Url) || !Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
         return Results.BadRequest(new { error = "Invalid or missing URL." });
 
     var downloadId = Guid.NewGuid().ToString("N");
     var preferredAgentId = string.IsNullOrWhiteSpace(request.PreferredAgentId) ? null : request.PreferredAgentId.Trim();
-    var state = new DownloadState(downloadId, request.Url.Trim(), "Queued", DateTime.UtcNow, PreferredAgentId: preferredAgentId);
+    var state = new DownloadState(downloadId, request.Url.Trim(), "Queued", DateTime.UtcNow, PreferredAgentId: preferredAgentId, QueuedBy: username);
     store.Add(state);
     await producer.EnqueueAsync(downloadId, state.Url, preferredAgentId, ct);
     return Results.Created($"/api/downloads/{downloadId}", new { downloadId, url = state.Url, status = state.Status });
@@ -128,6 +146,38 @@ downloadsApi.MapGet("/events", async (HttpContext ctx, IProgressBroadcaster broa
     }
 })
 .WithName("DownloadProgressStream");
+
+// --- Auth API (simple username-only login) ---
+app.MapPost("/api/auth/login", async (LoginRequest request, HttpContext ctx) =>
+{
+    var username = request.Username?.Trim();
+    if (string.IsNullOrWhiteSpace(username))
+        return Results.BadRequest(new { error = "Username is required." });
+    if (username.Length > 64)
+        return Results.BadRequest(new { error = "Username too long." });
+
+    var identity = new ClaimsIdentity(CookieAuthenticationDefaults.AuthenticationScheme);
+    identity.AddClaim(new Claim(ClaimTypes.Name, username));
+    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity),
+        new Microsoft.AspNetCore.Authentication.AuthenticationProperties { IsPersistent = true });
+    return Results.Ok(new { username });
+})
+.WithName("Login");
+
+app.MapPost("/api/auth/logout", async (HttpContext ctx) =>
+{
+    await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Ok(new { ok = true });
+})
+.WithName("Logout");
+
+app.MapGet("/api/auth/me", (HttpContext ctx) =>
+{
+    if (ctx.User.Identity?.IsAuthenticated != true)
+        return Results.Json(new { error = "Not logged in" }, statusCode: 401);
+    return Results.Ok(new { username = ctx.User.Identity.Name });
+})
+.WithName("GetCurrentUser");
 
 // --- Agents API ---
 app.MapGet("/api/agents", (IAgentStore agentStore) =>

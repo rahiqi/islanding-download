@@ -93,6 +93,7 @@ export function DownloadList({ downloads, onRefresh }: DownloadListProps) {
                   {d.totalBytes > 0 && ` / ${formatBytes(d.totalBytes)}`}
                 </span>
                 
+                {d.queuedBy && <span className="queued-by">Queued by: {d.queuedBy}</span>}
                 {d.preferredAgentId && !d.agentId && <span className="agent requested">Requested: {d.preferredAgentId}</span>}
                 {d.agentId && <span className="agent">Agent: {d.agentId}</span>}
               </div>
