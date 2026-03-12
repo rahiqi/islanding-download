@@ -46,9 +46,7 @@ export function DownloadList({ downloads }: DownloadListProps) {
                   {formatBytes(d.downloadedBytes)}
                   {d.totalBytes > 0 && ` / ${formatBytes(d.totalBytes)}`}
                 </span>
-                {d.status === 'Downloading' && d.bytesPerSecond > 0 && (
-                  // <span className="rate">{formatRate(d.bytesPerSecond)}</span>
-                )}
+              
                 {d.preferredAgentId && !d.agentId && <span className="agent requested">Requested: {d.preferredAgentId}</span>}
                 {d.agentId && <span className="agent">Agent: {d.agentId}</span>}
               </div>
