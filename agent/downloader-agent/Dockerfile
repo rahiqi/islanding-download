@@ -47,10 +47,12 @@ RUN dotnet publish "./downloader-agent.csproj" -c $BUILD_CONFIGURATION -o /app/p
 
 FROM base AS final
 USER root
-# Install librdkafka from our native stage (apt for amd64/arm64, from-source for arm32)
+# Install librdkafka: system path (ldconfig) + app dir so .NET loader finds it reliably (e.g. arm/v7)
 COPY --from=librdkafka-native /out/librdkafka.so* /usr/local/lib/
 RUN ldconfig
-USER $APP_UID
 WORKDIR /app
 COPY --from=publish /app/publish .
+COPY --from=librdkafka-native /out/librdkafka.so* /app/
+ENV LD_LIBRARY_PATH=/app
+USER $APP_UID
 ENTRYPOINT ["dotnet", "downloader-agent.dll"]
