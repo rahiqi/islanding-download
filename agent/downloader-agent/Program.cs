@@ -85,8 +85,8 @@ app.MapGet("/downloads/{downloadId}", (string downloadId, IOptions<DownloadWorke
     }
     if (!File.Exists(filePath))
         return Results.NotFound();
-    var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-    return Results.File(stream, "application/octet-stream", downloadFileName, enableRangeProcessing: true);
+    // Use path overload so Kestrel can use sendfile (Linux) / TransmitFile (Windows) for max throughput
+    return Results.File(filePath, "application/octet-stream", downloadFileName, enableRangeProcessing: true);
 });
 
 app.Run();
