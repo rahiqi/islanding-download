@@ -17,10 +17,13 @@
 # Target platform (for Portainer / single-file use):
 #   Raspberry Pi 32-bit: set AGENT_PLATFORM=linux/arm/v7 and AGENT_DOCKERFILE=RaspberryPi2 in the stack env.
 #   Main (64-bit): leave both unset.
-
+volumes:
+  downloads:
 services:
   downloader-agent:
     platform: ${AGENT_PLATFORM:-}
+    volumes:
+      - downloads:/app/downloads
     build:
       context: ..
       dockerfile: agent/downloader-agent/Dockerfile${AGENT_DOCKERFILE:-}
