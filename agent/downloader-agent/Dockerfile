@@ -25,6 +25,11 @@ RUN dotnet publish "./downloader-agent.csproj" -c $BUILD_CONFIGURATION -o /app/p
 
 # This stage is used in production or when running from VS in regular mode (Default when not using the Debug configuration)
 FROM base AS final
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "downloader-agent.dll"]
+COPY agent/downloader-agent/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["dotnet", "downloader-agent.dll"]
