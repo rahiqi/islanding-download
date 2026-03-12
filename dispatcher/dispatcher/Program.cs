@@ -42,7 +42,19 @@ builder.Services.AddCors();
 
 var app = builder.Build();
 
-app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader().AllowCredentials());
+// Credentials (cookies) require explicit origins; wildcard (*) is not allowed with credentials.
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? Array.Empty<string>();
+if (corsOrigins.Length == 0)
+{
+    // Defaults so dev and same-origin work without config
+    corsOrigins = new[] { "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8084", "http://127.0.0.1:8084", "https://localhost:5173", "https://localhost:8084" };
+}
+app.UseCors(policy => policy
+    .WithOrigins(corsOrigins)
+    .AllowAnyMethod()
+    .AllowAnyHeader()
+    .AllowCredentials());
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapOpenApi();
