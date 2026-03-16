@@ -31,7 +31,7 @@ builder.Services.AddSingleton<IKafkaDownloadProducer, KafkaDownloadProducer>();
 builder.Services.AddSingleton<IKafkaTopicEnsurer, KafkaTopicEnsurer>();
 builder.Services.AddHostedService<ProgressConsumerHostedService>();
 builder.Services.AddHostedService<AgentHeartbeatHostedService>();
-
+builder.Services.AddAuthorization();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -213,7 +213,6 @@ app.MapPost("/api/agents/register", async (AgentRegisterRequest? request, IAgent
 // Serve SPA static files (React) when not in development proxy
 app.UseDefaultFiles();
 app.UseStaticFiles();
-
 app.MapFallbackToFile("index.html");
 
 app.Run();
