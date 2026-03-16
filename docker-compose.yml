@@ -49,6 +49,7 @@ services:
         rpk topic create download-queue --partitions 4 --brokers redpanda:9092 || true
         rpk topic create download-progress --partitions 4 --brokers redpanda:9092 || true
         rpk topic create agent-heartbeat --partitions 2 --brokers redpanda:9092 || true
+        rpk topic create download-state --partitions 4 --brokers redpanda:9092 --config cleanup.policy=compact || true
         echo "Topics ready"
     depends_on:
       redpanda:

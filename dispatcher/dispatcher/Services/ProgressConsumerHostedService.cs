@@ -17,6 +17,7 @@ public sealed class ProgressConsumerHostedService : BackgroundService
     private readonly IConsumer<string, string> _consumer;
     private readonly IDownloadStore _store;
     private readonly IProgressBroadcaster _broadcaster;
+    private readonly IKafkaDownloadStateProducer _stateProducer;
     private readonly ILogger<ProgressConsumerHostedService> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
@@ -24,11 +25,13 @@ public sealed class ProgressConsumerHostedService : BackgroundService
         IOptions<KafkaConsumerOptions> options,
         IDownloadStore store,
         IProgressBroadcaster broadcaster,
-        ILogger<ProgressConsumerHostedService> logger)
+        ILogger<ProgressConsumerHostedService> logger,
+        IKafkaDownloadStateProducer stateProducer)
     {
         _store = store;
         _broadcaster = broadcaster;
         _logger = logger;
+        _stateProducer = stateProducer;
         var config = new ConsumerConfig
         {
             BootstrapServers = options.Value.BootstrapServers,
@@ -56,6 +59,14 @@ public sealed class ProgressConsumerHostedService : BackgroundService
                     if (msg is null)
                         continue;
                     _store.UpdateProgress(msg.DownloadId, msg.TotalBytes, msg.DownloadedBytes, msg.BytesPerSecond, msg.Status, msg.AgentId, msg.Message, msg.LocalDownloadUrl);
+
+                    // Persist updated state snapshot to Kafka so we can rebuild after restarts.
+                    var state = _store.Get(msg.DownloadId);
+                    if (state is not null)
+                    {
+                        await _stateProducer.SaveAsync(state, stoppingToken).ConfigureAwait(false);
+                    }
+
                     _broadcaster.Broadcast(msg);
                 }
                 catch (ConsumeException ex)

@@ -11,6 +11,8 @@ public class KafkaOptions
     public const string SectionName = "Kafka";
     public string BootstrapServers { get; set; } = "localhost:9092";
     public string DownloadQueueTopic { get; set; } = "download-queue";
+    /// <summary>Kafka topic used to persist DownloadState snapshots (compacted).</summary>
+    public string DownloadStateTopic { get; set; } = "download-state";
 }
 
 public interface IKafkaDownloadProducer

@@ -28,7 +28,10 @@ builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection(KafkaO
 builder.Services.Configure<KafkaConsumerOptions>(builder.Configuration.GetSection("KafkaConsumer"));
 builder.Services.Configure<AgentHeartbeatConsumerOptions>(builder.Configuration.GetSection("AgentHeartbeat"));
 builder.Services.AddSingleton<IKafkaDownloadProducer, KafkaDownloadProducer>();
+builder.Services.AddSingleton<IKafkaDownloadStateProducer, KafkaDownloadStateProducer>();
 builder.Services.AddSingleton<IKafkaTopicEnsurer, KafkaTopicEnsurer>();
+builder.Services.Configure<DownloadStateRebuildOptions>(builder.Configuration.GetSection("DownloadStateRebuild"));
+builder.Services.AddHostedService<DownloadStateRebuildHostedService>();
 builder.Services.AddHostedService<ProgressConsumerHostedService>();
 builder.Services.AddHostedService<AgentHeartbeatHostedService>();
 builder.Services.AddAuthorization();
@@ -64,7 +67,7 @@ var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingP
 // --- Downloads API ---
 var downloadsApi = app.MapGroup("/api/downloads");
 
-downloadsApi.MapPost("/", async (HttpContext ctx, DownloadSubmitRequest request, IDownloadStore store, IKafkaDownloadProducer producer, CancellationToken ct) =>
+downloadsApi.MapPost("/", async (HttpContext ctx, DownloadSubmitRequest request, IDownloadStore store, IKafkaDownloadProducer producer, IKafkaDownloadStateProducer stateProducer, CancellationToken ct) =>
 {
     var username = ctx.User.Identity?.IsAuthenticated == true ? ctx.User.Identity.Name : null;
     if (string.IsNullOrWhiteSpace(username))
@@ -77,6 +80,7 @@ downloadsApi.MapPost("/", async (HttpContext ctx, DownloadSubmitRequest request,
     var preferredAgentId = string.IsNullOrWhiteSpace(request.PreferredAgentId) ? null : request.PreferredAgentId.Trim();
     var state = new DownloadState(downloadId, request.Url.Trim(), "Queued", DateTime.UtcNow, PreferredAgentId: preferredAgentId, QueuedBy: username);
     store.Add(state);
+    await stateProducer.SaveAsync(state, ct).ConfigureAwait(false);
     await producer.EnqueueAsync(downloadId, state.Url, preferredAgentId, ct);
     return Results.Created($"/api/downloads/{downloadId}", new { downloadId, url = state.Url, status = state.Status });
 })
