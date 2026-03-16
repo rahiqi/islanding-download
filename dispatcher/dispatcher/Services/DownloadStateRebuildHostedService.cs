@@ -40,9 +40,10 @@ public sealed class DownloadStateRebuildHostedService : BackgroundService
         var config = new ConsumerConfig
         {
             BootstrapServers = options.Value.BootstrapServers,
-            GroupId = options.Value.GroupId,
+            // Always use a fresh consumer group so we replay the topic from the beginning on each restart.
+            GroupId = $"{options.Value.GroupId}-{Guid.NewGuid():N}",
             AutoOffsetReset = AutoOffsetReset.Earliest,
-            EnableAutoCommit = true
+            EnableAutoCommit = false
         };
         _consumer = new ConsumerBuilder<string, string>(config).Build();
         _consumer.Subscribe(_topic);
