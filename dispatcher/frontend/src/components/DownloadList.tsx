@@ -16,7 +16,7 @@ function formatBytes(n: number): string {
 //   return `${formatBytes(bytesPerSecond)}/s`
 // }
 
-export function DownloadList({ downloads, onRefresh }: DownloadListProps) {
+export function DownloadList({ downloads }: DownloadListProps) {
   if (downloads.length === 0) {
     return (
       <section className="download-list">
