@@ -27,6 +27,7 @@ services:
     build:
       context: ..
       dockerfile: agent/downloader-agent/Dockerfile${AGENT_DOCKERFILE:-}
+    restart: always
     environment:
       ASPNETCORE_URLS: http://+:8080
       DISPATCHER_URL: ${DISPATCHER_URL:?DISPATCHER_URL is required}
