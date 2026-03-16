@@ -100,42 +100,6 @@ downloadsApi.MapGet("/{id}", (string id, IDownloadStore store) =>
 })
 .WithName("GetDownload");
 
-downloadsApi.MapGet("/{id}/control", (string id, IDownloadStore store) =>
-{
-    var action = store.GetRequestedAction(id);
-    return Results.Ok(new { action = action ?? "none" });
-})
-.WithName("GetDownloadControl");
-
-downloadsApi.MapPost("/{id}/pause", (string id, IDownloadStore store) =>
-{
-    if (store.Get(id) is null) return Results.NotFound();
-    store.SetRequestedAction(id, "pause");
-    return Results.Ok(new { downloadId = id, action = "pause" });
-})
-.WithName("PauseDownload");
-
-downloadsApi.MapPost("/{id}/resume", async (string id, IDownloadStore store, IKafkaDownloadProducer producer, CancellationToken ct) =>
-{
-    var d = store.Get(id);
-    if (d is null) return Results.NotFound();
-    if (d.Status != "Paused") return Results.BadRequest(new { error = "Download is not paused." });
-    if (string.IsNullOrEmpty(d.AgentId)) return Results.BadRequest(new { error = "No agent assigned to resume." });
-    store.SetRequestedAction(id, null);
-    store.UpdateProgress(id, d.TotalBytes, d.DownloadedBytes, 0, "Queued", d.AgentId, null, d.LocalDownloadUrl);
-    await producer.EnqueueResumeAsync(id, d.Url, d.DownloadedBytes, d.AgentId, ct);
-    return Results.Ok(new { downloadId = id, action = "resume" });
-})
-.WithName("ResumeDownload");
-
-downloadsApi.MapPost("/{id}/cancel", (string id, IDownloadStore store) =>
-{
-    if (store.Get(id) is null) return Results.NotFound();
-    store.SetRequestedAction(id, "cancel");
-    return Results.Ok(new { downloadId = id, action = "cancel" });
-})
-.WithName("CancelDownload");
-
 // SSE progress stream
 downloadsApi.MapGet("/events", async (HttpContext ctx, IProgressBroadcaster broadcaster) =>
 {

@@ -18,7 +18,6 @@ public class KafkaOptions
 public interface IKafkaDownloadProducer
 {
     Task EnqueueAsync(string downloadId, string url, string? preferredAgentId = null, CancellationToken cancellationToken = default);
-    Task EnqueueResumeAsync(string downloadId, string url, long startByte, string agentId, CancellationToken cancellationToken = default);
 }
 
 public sealed class KafkaDownloadProducer : IKafkaDownloadProducer
@@ -43,14 +42,6 @@ public sealed class KafkaDownloadProducer : IKafkaDownloadProducer
             : AgentTopic(_baseTopic, preferredAgentId.Trim());
 
         var message = new DownloadQueueMessage(downloadId, url, DateTime.UtcNow);
-        var json = JsonSerializer.Serialize(message, JsonOptions);
-        await _producer.ProduceAsync(topic, new Message<string, string> { Key = downloadId, Value = json }, cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task EnqueueResumeAsync(string downloadId, string url, long startByte, string agentId, CancellationToken cancellationToken = default)
-    {
-        var topic = AgentTopic(_baseTopic, agentId);
-        var message = new DownloadQueueMessage(downloadId, url, DateTime.UtcNow, startByte);
         var json = JsonSerializer.Serialize(message, JsonOptions);
         await _producer.ProduceAsync(topic, new Message<string, string> { Key = downloadId, Value = json }, cancellationToken).ConfigureAwait(false);
     }

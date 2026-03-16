@@ -90,7 +90,6 @@ public sealed class DownloadWorkerService : BackgroundService
     private readonly int _progressIntervalMs;
     private readonly string _downloadPath;
     private readonly string _localServeBaseUrl;
-    private readonly string _dispatcherBaseUrl;
     private readonly int _maxDownloadConnections;
     private readonly long _minSizeForMultiConnection;
     private readonly long _minSegmentSizeBytes;
@@ -110,7 +109,6 @@ public sealed class DownloadWorkerService : BackgroundService
         _progressIntervalMs = options.Value.ProgressIntervalMs;
         _downloadPath = Path.GetFullPath(options.Value.DownloadPath);
         _localServeBaseUrl = (agentOptions.Value.LocalServeBaseUrl ?? "").TrimEnd('/');
-        _dispatcherBaseUrl = (agentOptions.Value.DispatcherUrl ?? "").TrimEnd('/');
         _maxDownloadConnections = Math.Clamp(options.Value.MaxDownloadConnections, 1, 32);
         _minSizeForMultiConnection = Math.Max(0, options.Value.MinSizeForMultiConnectionBytes);
         _minSegmentSizeBytes = Math.Max(65536, options.Value.MinSegmentSizeBytes); // at least 64 KB per segment
@@ -167,26 +165,11 @@ public sealed class DownloadWorkerService : BackgroundService
 
     private async Task ProcessDownloadAsync(DownloadQueueMessage msg, CancellationToken ct)
     {
-        var action = await GetControlActionAsync(msg.DownloadId, ct).ConfigureAwait(false);
-        if (action == "cancel")
-        {
-            await SendProgressAsync(msg.DownloadId, null, 0, 0, "Cancelled", null, null, ct).ConfigureAwait(false);
-            return;
-        }
-
         Interlocked.Increment(ref _currentDownloads);
         try
         {
-            if (msg.StartByte is > 0)
-            {
-                _logger.LogInformation("Resuming download {DownloadId}: {Url} from byte {StartByte}", msg.DownloadId, msg.Url, msg.StartByte);
-                await DownloadResumeAsync(msg.DownloadId, msg.Url, msg.StartByte.Value, ct).ConfigureAwait(false);
-            }
-            else
-            {
-                _logger.LogInformation("Starting download {DownloadId}: {Url}", msg.DownloadId, msg.Url);
-                await DownloadWithProgressAsync(msg.DownloadId, msg.Url, ct).ConfigureAwait(false);
-            }
+            _logger.LogInformation("Starting download {DownloadId}: {Url}", msg.DownloadId, msg.Url);
+            await DownloadWithProgressAsync(msg.DownloadId, msg.Url, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -196,25 +179,6 @@ public sealed class DownloadWorkerService : BackgroundService
         finally
         {
             Interlocked.Decrement(ref _currentDownloads);
-        }
-    }
-
-    /// <summary>Polls the dispatcher for pause/cancel. Returns "pause", "cancel", or null.</summary>
-    private async Task<string?> GetControlActionAsync(string downloadId, CancellationToken ct)
-    {
-        if (string.IsNullOrEmpty(_dispatcherBaseUrl)) return null;
-        try
-        {
-            using var response = await _httpClient.GetAsync($"{_dispatcherBaseUrl}/api/downloads/{downloadId}/control", ct).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            var doc = System.Text.Json.JsonDocument.Parse(json);
-            var action = doc.RootElement.TryGetProperty("action", out var a) ? a.GetString() : null;
-            return action is "pause" or "cancel" ? action : null;
-        }
-        catch
-        {
-            return null;
         }
     }
 
@@ -231,91 +195,21 @@ public sealed class DownloadWorkerService : BackgroundService
             && supportsRanges
             && totalBytes.Value > 0;
 
-        string? controlStatus;
         if (useMultiConnection)
         {
             var numSegments = (int)Math.Min(_maxDownloadConnections, (totalBytes!.Value + _minSegmentSizeBytes - 1) / _minSegmentSizeBytes);
             numSegments = Math.Max(1, numSegments);
             _logger.LogInformation("Download {DownloadId}: multi-connection with {Connections} segments", downloadId, numSegments);
-            controlStatus = await DownloadMultiConnectionAsync(downloadId, url, filePath, totalBytes!.Value, numSegments, ct).ConfigureAwait(false);
+            await DownloadMultiConnectionAsync(downloadId, url, filePath, totalBytes!.Value, numSegments, ct).ConfigureAwait(false);
         }
         else
         {
-            controlStatus = await DownloadSingleConnectionAsync(downloadId, url, filePath, totalBytes, ct).ConfigureAwait(false);
+            await DownloadSingleConnectionAsync(downloadId, url, filePath, totalBytes, ct).ConfigureAwait(false);
         }
-
-        if (controlStatus != null)
-            return; // already sent Paused or Cancelled
 
         var localUrl = string.IsNullOrEmpty(_localServeBaseUrl) ? null : $"{_localServeBaseUrl}/downloads/{downloadId}";
         await SendProgressAsync(downloadId, totalBytes, totalBytes ?? 0, 0, "Completed", null, localUrl, ct).ConfigureAwait(false);
         _logger.LogInformation("Completed download {DownloadId}, local URL: {LocalUrl}", downloadId, localUrl ?? "(none)");
-    }
-
-    private async Task DownloadResumeAsync(string downloadId, string url, long startByte, CancellationToken ct)
-    {
-        var dirPath = Path.Combine(_downloadPath, downloadId);
-        if (!Directory.Exists(dirPath))
-        {
-            await SendProgressAsync(downloadId, null, 0, 0, "Failed", "Resume: download directory not found", null, ct).ConfigureAwait(false);
-            return;
-        }
-        var files = Directory.GetFiles(dirPath);
-        if (files.Length == 0)
-        {
-            await SendProgressAsync(downloadId, null, 0, 0, "Failed", "Resume: no partial file found", null, ct).ConfigureAwait(false);
-            return;
-        }
-        var filePath = files[0];
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startByte, null);
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        var totalBytes = response.Content.Headers.ContentLength.HasValue ? startByte + response.Content.Headers.ContentLength : (long?)null;
-
-        await SendProgressAsync(downloadId, totalBytes, startByte, 0, "Downloading", null, null, ct).ConfigureAwait(false);
-
-        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        await using var fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.Read, 81920, FileOptions.Asynchronous);
-        var buffer = new byte[81920];
-        long downloaded = startByte;
-        var sw = Stopwatch.StartNew();
-        var lastProgressSend = Stopwatch.StartNew();
-
-        while (true)
-        {
-            var action = await GetControlActionAsync(downloadId, ct).ConfigureAwait(false);
-            if (action == "cancel")
-            {
-                try { File.Delete(filePath); } catch { /* best effort */ }
-                await SendProgressAsync(downloadId, totalBytes, downloaded, 0, "Cancelled", null, null, ct).ConfigureAwait(false);
-                return;
-            }
-            if (action == "pause")
-            {
-                await SendProgressAsync(downloadId, totalBytes, downloaded, 0, "Paused", null, null, ct).ConfigureAwait(false);
-                return;
-            }
-
-            var read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false);
-            if (read == 0)
-                break;
-            await fileStream.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
-            downloaded += read;
-            var elapsed = sw.Elapsed.TotalSeconds;
-            var rate = elapsed > 0 ? (downloaded - startByte) / elapsed : 0;
-
-            if (lastProgressSend.ElapsedMilliseconds >= _progressIntervalMs)
-            {
-                await SendProgressAsync(downloadId, totalBytes, downloaded, rate, "Downloading", null, null, ct).ConfigureAwait(false);
-                lastProgressSend.Restart();
-            }
-        }
-
-        var finalRate = sw.Elapsed.TotalSeconds > 0 ? (downloaded - startByte) / sw.Elapsed.TotalSeconds : 0;
-        var localUrl = string.IsNullOrEmpty(_localServeBaseUrl) ? null : $"{_localServeBaseUrl}/downloads/{downloadId}";
-        await SendProgressAsync(downloadId, totalBytes ?? downloaded, downloaded, finalRate, "Completed", null, localUrl, ct).ConfigureAwait(false);
-        _logger.LogInformation("Resumed download {DownloadId} completed", downloadId);
     }
 
     /// <summary>HEAD request to get size, range support, and headers (e.g. for filename).</summary>
@@ -329,7 +223,7 @@ public sealed class DownloadWorkerService : BackgroundService
         return (totalBytes, supportsRanges, response.Content.Headers);
     }
 
-    private async Task<string?> DownloadSingleConnectionAsync(string downloadId, string url, string filePath, long? totalBytes, CancellationToken ct)
+    private async Task DownloadSingleConnectionAsync(string downloadId, string url, string filePath, long? totalBytes, CancellationToken ct)
     {
         using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
@@ -346,20 +240,6 @@ public sealed class DownloadWorkerService : BackgroundService
 
         while (true)
         {
-            var action = await GetControlActionAsync(downloadId, ct).ConfigureAwait(false);
-            if (action == "cancel")
-            {
-                fileStream.Close();
-                try { File.Delete(filePath); } catch { /* best effort */ }
-                await SendProgressAsync(downloadId, totalBytes, downloaded, 0, "Cancelled", null, null, ct).ConfigureAwait(false);
-                return "Cancelled";
-            }
-            if (action == "pause")
-            {
-                await SendProgressAsync(downloadId, totalBytes, downloaded, 0, "Paused", null, null, ct).ConfigureAwait(false);
-                return "Paused";
-            }
-
             var read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false);
             if (read == 0)
                 break;
@@ -374,10 +254,9 @@ public sealed class DownloadWorkerService : BackgroundService
                 lastProgressSend.Restart();
             }
         }
-        return null; // completed
     }
 
-    private async Task<string?> DownloadMultiConnectionAsync(string downloadId, string url, string filePath, long totalBytes, int numSegments, CancellationToken ct)
+    private async Task DownloadMultiConnectionAsync(string downloadId, string url, string filePath, long totalBytes, int numSegments, CancellationToken ct)
     {
         await SendProgressAsync(downloadId, totalBytes, 0, 0, "Downloading", null, null, ct).ConfigureAwait(false);
 
@@ -393,37 +272,6 @@ public sealed class DownloadWorkerService : BackgroundService
 
         long totalDownloaded = 0;
         var sw = Stopwatch.StartNew();
-        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var controlResult = new string?[1];
-
-        var progressTask = Task.Run(async () =>
-        {
-            var lastTotal = 0L;
-            var lastTime = sw.Elapsed.TotalSeconds;
-            while (!linkedCts.Token.IsCancellationRequested)
-            {
-                try
-                {
-                    await Task.Delay(_progressIntervalMs, linkedCts.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) { break; }
-                var action = await GetControlActionAsync(downloadId, linkedCts.Token).ConfigureAwait(false);
-                if (action is "pause" or "cancel")
-                {
-                    controlResult[0] = action;
-                    linkedCts.Cancel();
-                    break;
-                }
-                var current = Interlocked.Read(ref totalDownloaded);
-                var now = sw.Elapsed.TotalSeconds;
-                var rate = now > lastTime ? (current - lastTotal) / (now - lastTime) : 0;
-                lastTotal = current;
-                lastTime = now;
-                await SendProgressAsync(downloadId, totalBytes, current, rate, "Downloading", null, null, CancellationToken.None).ConfigureAwait(false);
-                if (current >= totalBytes)
-                    break;
-            }
-        }, CancellationToken.None);
 
         var writeLock = new SemaphoreSlim(1, 1);
         try
@@ -438,19 +286,19 @@ public sealed class DownloadWorkerService : BackgroundService
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(range.Start, range.End);
-                using var response = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+                using var response = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
                 response.EnsureSuccessStatusCode();
-                await using var stream = await response.Content.ReadAsStreamAsync(linkedCts.Token).ConfigureAwait(false);
+                await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
                 var buffer = new byte[81920];
                 long segmentOffset = range.Start;
                 int read;
-                while ((read = await stream.ReadAsync(buffer, linkedCts.Token).ConfigureAwait(false)) > 0)
+                while ((read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
                 {
-                    await writeLock.WaitAsync(linkedCts.Token).ConfigureAwait(false);
+                    await writeLock.WaitAsync(ct).ConfigureAwait(false);
                     try
                     {
                         fileStream.Seek(segmentOffset, SeekOrigin.Begin);
-                        await fileStream.WriteAsync(buffer.AsMemory(0, read), linkedCts.Token).ConfigureAwait(false);
+                        await fileStream.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
                     }
                     finally
                     {
@@ -462,29 +310,9 @@ public sealed class DownloadWorkerService : BackgroundService
             });
             await Task.WhenAll(segmentTasks).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-            var status = controlResult[0];
-            if (status == "cancel")
-            {
-                try { File.Delete(filePath); } catch { /* best effort */ }
-                var current = Interlocked.Read(ref totalDownloaded);
-                await SendProgressAsync(downloadId, totalBytes, current, 0, "Cancelled", null, null, CancellationToken.None).ConfigureAwait(false);
-                return "Cancelled";
-            }
-            if (status == "pause")
-            {
-                var current = Interlocked.Read(ref totalDownloaded);
-                await SendProgressAsync(downloadId, totalBytes, current, 0, "Paused", null, null, CancellationToken.None).ConfigureAwait(false);
-                return "Paused";
-            }
-        }
         finally
         {
-            linkedCts.Cancel();
-            try { await progressTask.ConfigureAwait(false); } catch (OperationCanceledException) { }
         }
-        return null; // completed
     }
 
     private async Task SendProgressAsync(string downloadId, long? totalBytes, long downloadedBytes, double bytesPerSecond, string status, string? message, string? localDownloadUrl, CancellationToken ct)

@@ -1,6 +1,4 @@
-import { useState, useCallback } from 'react'
 import type { DownloadState } from '../types/api'
-import { pauseDownload, resumeDownload, cancelDownload } from '../api/client'
 
 interface DownloadListProps {
   downloads: DownloadState[]
@@ -19,48 +17,6 @@ function formatBytes(n: number): string {
 // }
 
 export function DownloadList({ downloads, onRefresh }: DownloadListProps) {
-  const [acting, setActing] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const handlePause = useCallback(async (d: DownloadState) => {
-    setActing(d.downloadId)
-    setError(null)
-    try {
-      await pauseDownload(d.downloadId)
-      onRefresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to pause')
-    } finally {
-      setActing(null)
-    }
-  }, [onRefresh])
-
-  const handleResume = useCallback(async (d: DownloadState) => {
-    setActing(d.downloadId)
-    setError(null)
-    try {
-      await resumeDownload(d.downloadId)
-      onRefresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to resume')
-    } finally {
-      setActing(null)
-    }
-  }, [onRefresh])
-
-  const handleCancel = useCallback(async (d: DownloadState) => {
-    setActing(d.downloadId)
-    setError(null)
-    try {
-      await cancelDownload(d.downloadId)
-      onRefresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to cancel')
-    } finally {
-      setActing(null)
-    }
-  }, [onRefresh])
-
   if (downloads.length === 0) {
     return (
       <section className="download-list">
@@ -73,7 +29,6 @@ export function DownloadList({ downloads, onRefresh }: DownloadListProps) {
   return (
     <section className="download-list">
       <h2>Downloads ({downloads.length})</h2>
-      {error && <p className="error">{error}</p>}
       <ul>
         {downloads.map((d) => (
           <li key={d.downloadId} data-status={d.status}>
@@ -106,28 +61,6 @@ export function DownloadList({ downloads, onRefresh }: DownloadListProps) {
                 </a>
               </p>
             )}
-            <div className="download-actions">
-              {(d.status === 'Queued' || d.status === 'Downloading') && (
-                <>
-                  <button type="button" className="btn-pause" onClick={() => handlePause(d)} disabled={acting === d.downloadId}>
-                    Pause
-                  </button>
-                  <button type="button" className="btn-cancel" onClick={() => handleCancel(d)} disabled={acting === d.downloadId}>
-                    Cancel
-                  </button>
-                </>
-              )}
-              {d.status === 'Paused' && (
-                <>
-                  <button type="button" className="btn-resume" onClick={() => handleResume(d)} disabled={acting === d.downloadId}>
-                    Resume
-                  </button>
-                  <button type="button" className="btn-cancel" onClick={() => handleCancel(d)} disabled={acting === d.downloadId}>
-                    Cancel
-                  </button>
-                </>
-              )}
-            </div>
           </li>
         ))}
       </ul>
