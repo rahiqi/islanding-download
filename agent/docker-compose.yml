@@ -23,7 +23,7 @@ services:
   downloader-agent:
     platform: ${AGENT_PLATFORM-}
     volumes:
-      - downloads:/app/downloads
+      - ${HOST_DOWNLOAD_PATH:-downloads}:/app/downloads
     build:
       context: ..
       dockerfile: agent/downloader-agent/Dockerfile${AGENT_DOCKERFILE:-}

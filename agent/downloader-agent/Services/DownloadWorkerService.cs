@@ -186,7 +186,11 @@ public sealed class DownloadWorkerService : BackgroundService
     {
         var (totalBytes, supportsRanges, contentHeaders) = await ProbeDownloadAsync(url, ct).ConfigureAwait(false);
         var fileName = DownloadFileName.Resolve(contentHeaders, url, downloadId);
-        var dirPath = Path.Combine(_downloadPath, downloadId);
+        var dirPath = _downloadPath /*Path.Combine(_downloadPath, downloadId)*/;
+        if (Directory.Exists(dirPath))
+        {
+            dirPath = AddIncrement(dirPath);
+        }
         Directory.CreateDirectory(dirPath);
         var filePath = Path.Combine(dirPath, fileName);
 
@@ -210,6 +214,11 @@ public sealed class DownloadWorkerService : BackgroundService
         var localUrl = string.IsNullOrEmpty(_localServeBaseUrl) ? null : $"{_localServeBaseUrl}/downloads/{downloadId}";
         await SendProgressAsync(downloadId, totalBytes, totalBytes ?? 0, 0, "Completed", null, localUrl, ct).ConfigureAwait(false);
         _logger.LogInformation("Completed download {DownloadId}, local URL: {LocalUrl}", downloadId, localUrl ?? "(none)");
+    }
+
+    private string AddIncrement(string dirPath)
+    {
+        return dirPath+= Guid.NewGuid().ToString("N")[..8];
     }
 
     /// <summary>HEAD request to get size, range support, and headers (e.g. for filename).</summary>
