@@ -184,32 +184,40 @@ public sealed class DownloadWorkerService : BackgroundService
 
     private async Task DownloadWithProgressAsync(string downloadId, string url, CancellationToken ct)
     {
-        var (totalBytes, supportsRanges, contentHeaders) = await ProbeDownloadAsync(url, ct).ConfigureAwait(false);
-        var fileName = DownloadFileName.Resolve(contentHeaders, url, downloadId);
-        var dirPath = Path.Combine(_downloadPath, downloadId);
-        Directory.CreateDirectory(dirPath);
-        var filePath = Path.Combine(dirPath, fileName);
+        using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+        response.EnsureSuccessStatusCode();
+        var totalBytes = response.Content.Headers.ContentLength;
+        await SendProgressAsync(downloadId, 0, 0, 0, "Downloading", null, null, ct);
 
-        var useMultiConnection = totalBytes.HasValue
-            && totalBytes.Value >= _minSizeForMultiConnection
-            && supportsRanges
-            && totalBytes.Value > 0;
+        var filePath = Path.Combine(_downloadPath, downloadId);
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read, 81920, FileOptions.Asynchronous);
+        var buffer = new byte[81920];
+        long downloaded = 0;
+        var sw = Stopwatch.StartNew();
+        var lastProgressSend = Stopwatch.StartNew();
 
-        if (useMultiConnection)
+        while (true)
         {
-            var numSegments = (int)Math.Min(_maxDownloadConnections, (totalBytes!.Value + _minSegmentSizeBytes - 1) / _minSegmentSizeBytes);
-            numSegments = Math.Max(1, numSegments);
-            _logger.LogInformation("Download {DownloadId}: multi-connection with {Connections} segments", downloadId, numSegments);
-            await DownloadMultiConnectionAsync(downloadId, url, filePath, totalBytes!.Value, numSegments, ct).ConfigureAwait(false);
-        }
-        else
-        {
-            await DownloadSingleConnectionAsync(downloadId, url, filePath, totalBytes, ct).ConfigureAwait(false);
+            var read = await stream.ReadAsync(buffer, ct);
+            if (read == 0)
+                break;
+            await fileStream.WriteAsync(buffer.AsMemory(0, read), ct);
+            downloaded += read;
+            var elapsed = sw.Elapsed.TotalSeconds;
+            var rate = elapsed > 0 ? downloaded / elapsed : 0;
+
+            if (lastProgressSend.ElapsedMilliseconds >= _progressIntervalMs)
+            {
+                await SendProgressAsync(downloadId, totalBytes, downloaded, rate, "Downloading", null, null, ct);
+                lastProgressSend.Restart();
+            }
         }
 
+        var finalRate = sw.Elapsed.TotalSeconds > 0 ? downloaded / sw.Elapsed.TotalSeconds : 0;
         var localUrl = string.IsNullOrEmpty(_localServeBaseUrl) ? null : $"{_localServeBaseUrl}/downloads/{downloadId}";
-        await SendProgressAsync(downloadId, totalBytes, totalBytes ?? 0, 0, "Completed", null, localUrl, ct).ConfigureAwait(false);
-        _logger.LogInformation("Completed download {DownloadId}, local URL: {LocalUrl}", downloadId, localUrl ?? "(none)");
+        await SendProgressAsync(downloadId, totalBytes ?? downloaded, downloaded, finalRate, "Completed", null, localUrl, ct);
+        _logger.LogInformation("Completed download {DownloadId}: {Bytes} bytes, local URL: {LocalUrl}", downloadId, downloaded, localUrl ?? "(none)");
     }
 
     /// <summary>HEAD request to get size, range support, and headers (e.g. for filename).</summary>
