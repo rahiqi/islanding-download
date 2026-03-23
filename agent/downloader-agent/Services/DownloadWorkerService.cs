@@ -186,14 +186,15 @@ public sealed class DownloadWorkerService : BackgroundService
     {
         var (totalBytes, supportsRanges, contentHeaders) = await ProbeDownloadAsync(url, ct).ConfigureAwait(false);
         var fileName = DownloadFileName.Resolve(contentHeaders, url, downloadId);
-        var dirPath = _downloadPath /*Path.Combine(_downloadPath, downloadId)*/;
-        if (Directory.Exists(dirPath))
-        {
-            dirPath = AddIncrement(dirPath);
-        }
+        var dirPath = _downloadPath;/*Path.Combine(_downloadPath, fileName);*/
+      
         Directory.CreateDirectory(dirPath);
         var filePath = Path.Combine(dirPath, fileName);
-
+        if (File.Exists(fileName))
+        {
+            fileName = AddIncrement(fileName);
+            filePath = Path.Combine(_downloadPath, fileName);
+        }
         var useMultiConnection = totalBytes.HasValue
             && totalBytes.Value >= _minSizeForMultiConnection
             && supportsRanges
@@ -211,14 +212,15 @@ public sealed class DownloadWorkerService : BackgroundService
             await DownloadSingleConnectionAsync(downloadId, url, filePath, totalBytes, ct).ConfigureAwait(false);
         }
 
-        var localUrl = string.IsNullOrEmpty(_localServeBaseUrl) ? null : $"{_localServeBaseUrl}/downloads/{downloadId}";
+        var localUrl = string.IsNullOrEmpty(_localServeBaseUrl) ? null : $"{_localServeBaseUrl}/downloads/{fileName}";
         await SendProgressAsync(downloadId, totalBytes, totalBytes ?? 0, 0, "Completed", null, localUrl, ct).ConfigureAwait(false);
         _logger.LogInformation("Completed download {DownloadId}, local URL: {LocalUrl}", downloadId, localUrl ?? "(none)");
     }
 
-    private string AddIncrement(string dirPath)
+    private string AddIncrement(string fileName)
     {
-        return dirPath+= Guid.NewGuid().ToString("N")[..8];
+        var hash = Guid.NewGuid().ToString("N")[..8];
+        return hash += fileName;
     }
 
     /// <summary>HEAD request to get size, range support, and headers (e.g. for filename).</summary>
