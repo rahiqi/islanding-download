@@ -24,10 +24,10 @@ WORKDIR /app
 # App binaries
 COPY --from=build /app/publish .
 
-# Prebuilt Kafka binaries provided from repository root /agent
-COPY agent/Confluent.Kafka.dll /app/Confluent.Kafka.dll
-COPY agent/librdkafka.so /app/librdkafka.so
-COPY agent/librdkafka.so.1 /app/librdkafka.so.1
+# Prebuilt Kafka binaries provided in the build context root
+COPY Confluent.Kafka.dll /app/Confluent.Kafka.dll
+COPY librdkafka.so /app/librdkafka.so
+COPY librdkafka.so.1 /app/librdkafka.so.1
 
 COPY agent/downloader-agent/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
