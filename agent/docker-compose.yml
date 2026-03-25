@@ -13,6 +13,8 @@
 #   AGENT_LOCAL_URL — base URL for local file serving (e.g. http://192.168.1.10:8080). If set, completed
 #                     downloads get a "Download from agent (local)" link; /downloads/* is restricted to private IPs.
 #   AGENT_DOWNLOAD_PATH — directory to store completed files (default: downloads).
+#   exFAT/FAT32 HOST_DOWNLOAD_PATH: chown inside the container cannot fix permissions; either mount the volume
+#   with uid=1000,gid=1000 (recommended) or set AGENT_RUN_AS_ROOT=1 so the process runs as root and can write.
 #
 # Target platform (for Portainer / single-file use):
 #   Raspberry Pi 32-bit: set AGENT_PLATFORM=linux/arm/v7 and AGENT_DOCKERFILE=RaspberryPi2 in the stack env.
@@ -38,6 +40,7 @@ services:
       Heartbeat__BootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS}
       AGENT_LOCAL_URL: ${AGENT_LOCAL_URL:-}
       AGENT_DOWNLOAD_PATH: ${AGENT_DOWNLOAD_PATH:-downloads}
+      AGENT_RUN_AS_ROOT: ${AGENT_RUN_AS_ROOT:-}
     # Expose 8081 so users on the local network can use the "Download from agent" link (AGENT_LOCAL_URL).
     ports:
       - "${AGENT_PORT:-8081}:8080"
