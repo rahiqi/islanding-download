@@ -283,6 +283,26 @@ public sealed class DownloadWorkerService : BackgroundService
 
         long totalDownloaded = 0;
         var sw = Stopwatch.StartNew();
+        using var progressCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var progressTask = Task.Run(async () =>
+        {
+            while (!progressCts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(_progressIntervalMs, progressCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
+                var downloaded = Interlocked.Read(ref totalDownloaded);
+                var elapsed = sw.Elapsed.TotalSeconds;
+                var rate = elapsed > 0 ? downloaded / elapsed : 0;
+                await SendProgressAsync(downloadId, totalBytes, downloaded, rate, "Downloading", null, null, ct).ConfigureAwait(false);
+            }
+        }, CancellationToken.None);
 
         var writeLock = new SemaphoreSlim(1, 1);
         try
@@ -323,7 +343,21 @@ public sealed class DownloadWorkerService : BackgroundService
         }
         finally
         {
+            progressCts.Cancel();
+            try
+            {
+                await progressTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected during shutdown/cancel.
+            }
         }
+
+        var finalDownloaded = Interlocked.Read(ref totalDownloaded);
+        var finalElapsed = sw.Elapsed.TotalSeconds;
+        var finalRate = finalElapsed > 0 ? finalDownloaded / finalElapsed : 0;
+        await SendProgressAsync(downloadId, totalBytes, finalDownloaded, finalRate, "Downloading", null, null, ct).ConfigureAwait(false);
     }
 
     private async Task SendProgressAsync(string downloadId, long? totalBytes, long downloadedBytes, double bytesPerSecond, string status, string? message, string? localDownloadUrl, CancellationToken ct)
