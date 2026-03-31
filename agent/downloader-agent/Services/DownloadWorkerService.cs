@@ -130,6 +130,8 @@ public sealed class DownloadWorkerService : BackgroundService
         _progressProducer = new ProducerBuilder<string, string>(producerConfig).Build();
 
         _httpClient = httpClientFactory.CreateClient(/*ChromeDownloadHeaders.HttpClientName*/);
+        // Large, long-running downloads may legitimately take a long time; use infinite timeout and rely on our own cancellation.
+        _httpClient.Timeout = Timeout.InfiniteTimeSpan;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -187,7 +189,7 @@ public sealed class DownloadWorkerService : BackgroundService
         var (totalBytes, supportsRanges, contentHeaders) = await ProbeDownloadAsync(url, ct).ConfigureAwait(false);
         var fileName = DownloadFileName.Resolve(contentHeaders, url, downloadId);
         var dirPath = _downloadPath;/*Path.Combine(_downloadPath, fileName);*/
-      
+
         Directory.CreateDirectory(dirPath);
         var filePath = Path.Combine(dirPath, fileName);
         if (File.Exists(fileName))
@@ -202,10 +204,33 @@ public sealed class DownloadWorkerService : BackgroundService
 
         if (useMultiConnection)
         {
-            var numSegments = (int)Math.Min(_maxDownloadConnections, (totalBytes!.Value + _minSegmentSizeBytes - 1) / _minSegmentSizeBytes);
-            numSegments = Math.Max(1, numSegments);
-            _logger.LogInformation("Download {DownloadId}: multi-connection with {Connections} segments", downloadId, numSegments);
-            await DownloadMultiConnectionAsync(downloadId, url, filePath, totalBytes!.Value, numSegments, ct).ConfigureAwait(false);
+            var effectiveSegments = (int)Math.Min(_maxDownloadConnections, (totalBytes!.Value + _minSegmentSizeBytes - 1) / _minSegmentSizeBytes);
+            effectiveSegments = Math.Max(2, effectiveSegments);
+            var remainingRetries = 2;
+
+            while (true)
+            {
+                try
+                {
+                    _logger.LogInformation("Download {DownloadId}: multi-connection with {Connections} segments", downloadId, effectiveSegments);
+                    await DownloadMultiConnectionAsync(downloadId, url, filePath, totalBytes!.Value, effectiveSegments, ct).ConfigureAwait(false);
+                    break;
+                }
+                catch (Exception ex) when (ex is HttpRequestException || ex is IOException || ex.InnerException is IOException)
+                {
+                    if (remainingRetries <= 0 || effectiveSegments <= 2)
+                    {
+                        _logger.LogWarning(ex, "Multi-connection download failed for {DownloadId} with {Segments} segments, falling back to single-connection.", downloadId, effectiveSegments);
+                        await DownloadSingleConnectionAsync(downloadId, url, filePath, totalBytes, ct).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var previousSegments = effectiveSegments;
+                    effectiveSegments = Math.Max(2, effectiveSegments / 2);
+                    remainingRetries--;
+                    _logger.LogWarning(ex, "Multi-connection download failed for {DownloadId} with {PreviousSegments} segments, retrying with {NewSegments} segments.", downloadId, previousSegments, effectiveSegments);
+                }
+            }
         }
         else
         {
@@ -315,28 +340,65 @@ public sealed class DownloadWorkerService : BackgroundService
             await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.Write, 65536, FileOptions.Asynchronous);
             var segmentTasks = ranges.Select(async range =>
             {
-                using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(range.Start, range.End);
-                using var response = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
-                await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-                var buffer = new byte[81920];
-                long segmentOffset = range.Start;
-                int read;
-                while ((read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+                const int maxRetries = 5;
+                long completedInSegment = 0;
+
+                for (var attempt = 1; attempt <= maxRetries; attempt++)
                 {
-                    await writeLock.WaitAsync(ct).ConfigureAwait(false);
+                    ct.ThrowIfCancellationRequested();
+                    var startOffset = range.Start + completedInSegment;
+                    if (startOffset > range.End)
+                        break;
+
                     try
                     {
-                        fileStream.Seek(segmentOffset, SeekOrigin.Begin);
-                        await fileStream.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                        req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startOffset, range.End);
+                        using var response = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                        response.EnsureSuccessStatusCode();
+                        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                        var buffer = new byte[81920];
+                        long segmentOffset = startOffset;
+                        int read;
+                        while ((read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+                        {
+                            await writeLock.WaitAsync(ct).ConfigureAwait(false);
+                            try
+                            {
+                                fileStream.Seek(segmentOffset, SeekOrigin.Begin);
+                                await fileStream.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                            }
+                            finally
+                            {
+                                writeLock.Release();
+                            }
+                            segmentOffset += read;
+                            completedInSegment += read;
+                            Interlocked.Add(ref totalDownloaded, read);
+                        }
+
+                        // Finished this segment successfully, no more retries needed.
+                        break;
                     }
-                    finally
+                    catch (Exception ex) when (ex is HttpRequestException || ex is IOException || ex.InnerException is IOException)
                     {
-                        writeLock.Release();
+                        if (attempt >= maxRetries || ct.IsCancellationRequested)
+                        {
+                            _logger.LogError(ex, "Segment download failed permanently after {Attempts} attempts for range {Start}-{End}", attempt, range.Start, range.End);
+                            throw;
+                        }
+
+                        var delaySeconds = Math.Min(30, 2 * attempt);
+                        _logger.LogWarning(ex, "Segment download failed (attempt {Attempt}/{MaxAttempts}) for range {Start}-{End}, retrying in {DelaySeconds}s", attempt, maxRetries, range.Start, range.End, delaySeconds);
+                        try
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(delaySeconds), ct).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
                     }
-                    segmentOffset += read;
-                    Interlocked.Add(ref totalDownloaded, read);
                 }
             });
             await Task.WhenAll(segmentTasks).ConfigureAwait(false);
