@@ -59,8 +59,9 @@ public sealed class HeartbeatService : BackgroundService
 
     private async Task SendHeartbeatAsync(CancellationToken ct)
     {
-        var msg = new AgentHeartbeatMessage(_worker.AgentId, DateTime.UtcNow, _worker.CurrentDownloads);
+        var (total, free, used) = _worker.GetDownloadDiskUsage();
+        var msg = new AgentHeartbeatMessage(_worker.AgentId, DateTime.UtcNow, _worker.CurrentDownloads, total, free, used);
         var json = JsonSerializer.Serialize(msg, _jsonOptions);
-       var result =  await _producer.ProduceAsync(_topic, new Message<string, string> { Key = _worker.AgentId, Value = json }, ct);
+        var result = await _producer.ProduceAsync(_topic, new Message<string, string> { Key = _worker.AgentId, Value = json }, ct);
     }
 }

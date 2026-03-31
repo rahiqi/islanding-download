@@ -14,6 +14,24 @@ function formatTime(iso: string) {
   return d.toLocaleTimeString()
 }
 
+function renderDiskUsage(a: AgentInfo) {
+  if (!a.downloadDiskTotalBytes || !a.downloadDiskFreeBytes || a.downloadDiskTotalBytes <= 0) return null
+  const used = a.downloadDiskUsedBytes ?? a.downloadDiskTotalBytes - a.downloadDiskFreeBytes
+  const usedPercent = Math.min(100, Math.max(0, (used / a.downloadDiskTotalBytes) * 100))
+  const freeGiB = a.downloadDiskFreeBytes / (1024 * 1024 * 1024)
+  const totalGiB = a.downloadDiskTotalBytes / (1024 * 1024 * 1024)
+  return (
+    <span className="agent-disk">
+      <span className="agent-disk-bar">
+        <span className="agent-disk-bar-used" style={{ width: `${usedPercent}%` }} />
+      </span>
+      <span className="agent-disk-text">
+        {freeGiB.toFixed(1)} GiB free of {totalGiB.toFixed(1)} GiB
+      </span>
+    </span>
+  )
+}
+
 export function AgentList({ agents, error }: AgentListProps) {
   return (
     <section className="agent-list">
@@ -29,6 +47,7 @@ export function AgentList({ agents, error }: AgentListProps) {
             </span>
             <span className="agent-meta">
               last seen {formatTime(a.lastSeen)} · {a.currentDownloads} active
+              {renderDiskUsage(a)}
             </span>
           </li>
         ))}

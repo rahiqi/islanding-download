@@ -22,6 +22,9 @@ export interface AgentInfo {
   location: string
   lastSeen: string
   currentDownloads: number
+  downloadDiskTotalBytes?: number | null
+  downloadDiskFreeBytes?: number | null
+  downloadDiskUsedBytes?: number | null
 }
 
 export interface ProgressEvent {

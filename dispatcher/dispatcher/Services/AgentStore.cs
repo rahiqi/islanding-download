@@ -15,11 +15,18 @@ public sealed class AgentStore : IAgentStore
             (_, existing) => existing with { Name = name ?? existing.Name, Location = location ?? existing.Location });
     }
 
-    public void UpsertAgent(string agentId, DateTime lastSeen, int currentDownloads)
+    public void UpsertAgent(string agentId, DateTime lastSeen, int currentDownloads, long? totalBytes = null, long? freeBytes = null, long? usedBytes = null)
     {
         _agents.AddOrUpdate(agentId,
-            _ => new AgentInfo(agentId, "", "", lastSeen, currentDownloads),
-            (_, existing) => existing with { LastSeen = lastSeen, CurrentDownloads = currentDownloads });
+            _ => new AgentInfo(agentId, "", "", lastSeen, currentDownloads, totalBytes, freeBytes, usedBytes),
+            (_, existing) => existing with
+            {
+                LastSeen = lastSeen,
+                CurrentDownloads = currentDownloads,
+                DownloadDiskTotalBytes = totalBytes ?? existing.DownloadDiskTotalBytes,
+                DownloadDiskFreeBytes = freeBytes ?? existing.DownloadDiskFreeBytes,
+                DownloadDiskUsedBytes = usedBytes ?? existing.DownloadDiskUsedBytes
+            });
     }
 
     public IReadOnlyList<AgentInfo> GetAvailableAgents(TimeSpan maxAge)

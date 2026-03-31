@@ -52,7 +52,8 @@ public sealed class AgentHeartbeatHostedService : BackgroundService
                     var msg = JsonSerializer.Deserialize<AgentHeartbeatMessage>(json, JsonOptions);
                     if (msg is null)
                         continue;
-                    _agentStore.UpsertAgent(msg.AgentId, msg.LastSeen, msg.CurrentDownloads);
+                    _agentStore.UpsertAgent(msg.AgentId, msg.LastSeen, msg.CurrentDownloads,
+                        msg.DownloadDiskTotalBytes, msg.DownloadDiskFreeBytes, msg.DownloadDiskUsedBytes);
                 }
                 catch (ConsumeException ex)
                 {

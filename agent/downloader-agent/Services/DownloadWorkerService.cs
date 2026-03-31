@@ -431,4 +431,33 @@ public sealed class DownloadWorkerService : BackgroundService
 
     public int CurrentDownloads => _currentDownloads;
     public string AgentId => _agentId;
+
+    private static (long TotalBytes, long FreeBytes, long UsedBytes)? GetDiskUsage(string path)
+    {
+        try
+        {
+            var full = Path.GetFullPath(path);
+            var root = Path.GetPathRoot(full);
+            if (string.IsNullOrEmpty(root))
+                return null;
+            var drive = DriveInfo.GetDrives().FirstOrDefault(d =>
+                string.Equals(d.Name, root, StringComparison.OrdinalIgnoreCase));
+            if (drive == null || !drive.IsReady)
+                return null;
+            var total = drive.TotalSize;
+            var free = drive.AvailableFreeSpace;
+            var used = total - free;
+            return (total, free, used);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public (long? TotalBytes, long? FreeBytes, long? UsedBytes) GetDownloadDiskUsage()
+    {
+        var usage = GetDiskUsage(_downloadPath);
+        return usage is null ? (null, null, null) : (usage.Value.TotalBytes, usage.Value.FreeBytes, usage.Value.UsedBytes);
+    }
 }
