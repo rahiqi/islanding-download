@@ -10,7 +10,7 @@ EXPOSE 8081
 
 # This stage is used to build the service project
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-
+ENV DOTNET_SYSTEM_NET_DISABLEIPV6=1
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
@@ -18,7 +18,7 @@ WORKDIR /src
 RUN apt-get update && apt-get install -y ca-certificates curl && update-ca-certificates
 
 # Optional: debug connectivity
- RUN curl  https://www.google.com
+RUN curl -4v https://api.nuget.org/v3/index.json
 
 # Force stable HTTP handling
 ENV DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=0
