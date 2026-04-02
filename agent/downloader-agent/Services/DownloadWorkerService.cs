@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Security.Authentication;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Confluent.Kafka;
@@ -448,17 +449,49 @@ public sealed class DownloadWorkerService : BackgroundService
         try
         {
             var full = Path.GetFullPath(path);
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                // Use df for the exact path/mountpoint (ex: /mnt/usb/downloads), not just "/" root.
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "df",
+                    Arguments = $"-B1 --output=size,used,avail -- \"{full}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using var proc = Process.Start(psi);
+                if (proc is null)
+                    return null;
+                var output = proc.StandardOutput.ReadToEnd();
+                proc.WaitForExit(2000);
+                if (proc.ExitCode != 0)
+                    return null;
+                var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (lines.Length < 2)
+                    return null;
+                var parts = lines[1].Split((char[])null!, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 3)
+                    return null;
+                if (!long.TryParse(parts[0], out var total) ||
+                    !long.TryParse(parts[1], out var used) ||
+                    !long.TryParse(parts[2], out var free))
+                    return null;
+                return (total, free, used);
+            }
+
+            // Fallback for non-Linux (e.g. Windows local dev)
             var root = Path.GetPathRoot(full);
             if (string.IsNullOrEmpty(root))
                 return null;
-            var drive = DriveInfo.GetDrives().FirstOrDefault(d =>
-                string.Equals(d.Name, root, StringComparison.OrdinalIgnoreCase));
-            if (drive == null || !drive.IsReady)
+            var drive = new DriveInfo(root);
+            if (!drive.IsReady)
                 return null;
-            var total = drive.TotalSize;
-            var free = drive.AvailableFreeSpace;
-            var used = total - free;
-            return (total, free, used);
+            var totalFallback = drive.TotalSize;
+            var freeFallback = drive.AvailableFreeSpace;
+            var usedFallback = totalFallback - freeFallback;
+            return (totalFallback, freeFallback, usedFallback);
         }
         catch
         {
