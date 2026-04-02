@@ -10,12 +10,26 @@ EXPOSE 8081
 
 # This stage is used to build the service project
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+
+# Fix TLS / cert issues
+RUN apt-get update && apt-get install -y ca-certificates curl && update-ca-certificates
+
+# Optional: debug connectivity
+ RUN curl -v https://api.nuget.org/v3/index.json
+
+# Force stable HTTP handling
+ENV DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=0
+
 COPY ["agent/downloader-agent/downloader-agent.csproj", "agent/downloader-agent/"]
-RUN dotnet restore "./agent/downloader-agent/downloader-agent.csproj"
+
+RUN dotnet restore "./agent/downloader-agent/downloader-agent.csproj" --disable-parallel
+
 COPY . .
 WORKDIR "/src/agent/downloader-agent"
+
 RUN dotnet build "./downloader-agent.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # This stage is used to publish the service project to be copied to the final stage
