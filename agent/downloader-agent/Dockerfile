@@ -18,7 +18,7 @@ WORKDIR /src
 RUN apt-get update && apt-get install -y ca-certificates curl && update-ca-certificates
 
 # Optional: debug connectivity
-# RUN curl  https://api.nuget.org/v3/index.json
+ RUN curl  https://www.google.com
 
 # Force stable HTTP handling
 ENV DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=0
