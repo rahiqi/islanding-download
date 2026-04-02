@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http.Headers;
+using System.Security.Authentication;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Confluent.Kafka;
@@ -85,6 +86,7 @@ public sealed class DownloadWorkerService : BackgroundService
     private readonly IConsumer<string, string> _consumer;
     private readonly IProducer<string, string> _progressProducer;
     private readonly HttpClient _httpClient;
+    private readonly HttpClient _insecureHttpClient;
     private readonly string _agentId;
     private readonly string _progressTopic;
     private readonly int _progressIntervalMs;
@@ -132,6 +134,17 @@ public sealed class DownloadWorkerService : BackgroundService
         _httpClient = httpClientFactory.CreateClient(/*ChromeDownloadHeaders.HttpClientName*/);
         // Large, long-running downloads may legitimately take a long time; use infinite timeout and rely on our own cancellation.
         _httpClient.Timeout = Timeout.InfiniteTimeSpan;
+        _insecureHttpClient = new HttpClient(new SocketsHttpHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+            SslOptions = new System.Net.Security.SslClientAuthenticationOptions
+            {
+                RemoteCertificateValidationCallback = (_, _, _, _) => true
+            }
+        })
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -162,6 +175,7 @@ public sealed class DownloadWorkerService : BackgroundService
             _consumer.Close();
             _consumer.Dispose();
             _progressProducer.Dispose();
+            _insecureHttpClient.Dispose();
         }
     }
 
@@ -251,8 +265,7 @@ public sealed class DownloadWorkerService : BackgroundService
     /// <summary>HEAD request to get size, range support, and headers (e.g. for filename).</summary>
     private async Task<(long? TotalBytes, bool SupportsRanges, HttpContentHeaders ContentHeaders)> ProbeDownloadAsync(string url, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Head, url);
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        using var response = await SendRequestWithSslFallbackAsync(HttpMethod.Head, url, null, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         var totalBytes = response.Content.Headers.ContentLength;
         var supportsRanges = response.Headers.AcceptRanges?.Contains("bytes", StringComparer.OrdinalIgnoreCase) == true;
@@ -261,7 +274,7 @@ public sealed class DownloadWorkerService : BackgroundService
 
     private async Task DownloadSingleConnectionAsync(string downloadId, string url, string filePath, long? totalBytes, CancellationToken ct)
     {
-        using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        using var response = await SendRequestWithSslFallbackAsync(HttpMethod.Get, url, null, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         totalBytes ??= response.Content.Headers.ContentLength;
 
@@ -352,9 +365,7 @@ public sealed class DownloadWorkerService : BackgroundService
 
                     try
                     {
-                        using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                        req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startOffset, range.End);
-                        using var response = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                        using var response = await SendRequestWithSslFallbackAsync(HttpMethod.Get, url, new RangeHeaderValue(startOffset, range.End), ct).ConfigureAwait(false);
                         response.EnsureSuccessStatusCode();
                         await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
                         var buffer = new byte[81920];
@@ -459,5 +470,39 @@ public sealed class DownloadWorkerService : BackgroundService
     {
         var usage = GetDiskUsage(_downloadPath);
         return usage is null ? (null, null, null) : (usage.Value.TotalBytes, usage.Value.FreeBytes, usage.Value.UsedBytes);
+    }
+
+    private async Task<HttpResponseMessage> SendRequestWithSslFallbackAsync(HttpMethod method, string url, RangeHeaderValue? range, CancellationToken ct)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(method, url);
+            if (range is not null)
+                req.Headers.Range = range;
+            return await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsSslCertificateOrHandshakeError(ex))
+        {
+            _logger.LogWarning(ex, "TLS validation failed for {Url}; retrying with certificate validation disabled.", url);
+            using var insecureReq = new HttpRequestMessage(method, url);
+            if (range is not null)
+                insecureReq.Headers.Range = range;
+            return await _insecureHttpClient.SendAsync(insecureReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        }
+    }
+
+    private static bool IsSslCertificateOrHandshakeError(Exception ex)
+    {
+        for (var current = ex; current is not null; current = current.InnerException!)
+        {
+            if (current is AuthenticationException)
+                return true;
+            if (current is HttpRequestException hre &&
+                hre.Message.Contains("SSL connection could not be established", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (current.Message.Contains("certificate", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 }
